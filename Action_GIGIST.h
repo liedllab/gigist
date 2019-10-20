@@ -248,15 +248,45 @@ private:
   void calcTransEntropyDist(int, int, int, double &, double &);
 
   // In: Action_GIGIST.cpp
-  // line: 1031
+  // line: 1035
   int weight(std::string);
 
   // In: Action_GIGIST.cpp
-	// line: 1053
+	// line: 1058
   void writeDxFile(std::string, std::vector<double>);
 
 
   // Necessary Variables
+
+  // For CUDA use, store some more elements
+#ifdef CUDA
+  std::vector<float> lJParamsA_;
+  std::vector<float> lJParamsB_;
+  std::vector<int> NBIndex_;
+  int numberAtomTypes_;
+
+  // Arrays on GPU
+  int *NBindex_c_;
+  void *molecule_c_;
+  void *paramsLJ_c_;
+  float *max_c_;
+  float *min_c_;
+  float *result_w_c_;
+  float *result_s_c_;
+  int *result_O_c_;
+  int *result_N_c_;
+
+  // CUDA only functions
+
+  // In: Action_GIGIST.cpp
+  // line: 1087
+  void freeGPUMemory(void);
+
+  // In: Action_GIGIST.cpp
+  // line: 1112
+  void copyToGPU(void);
+
+#endif
 
   // Dataset pointer
   DataSetList *list_;
@@ -300,7 +330,7 @@ private:
   bool *solvent_;
   
   std::vector<std::vector<Vec3> > waterCoordinates_;
-  DataDictionary dict_ = DataDictionary();
+  DataDictionary dict_;
 
   CpptrajFile *datafile_;
   CpptrajFile *dxfile_;
@@ -316,35 +346,7 @@ private:
   Timer tEnergy_;
 
 
-  // For CUDA use, store some more elements
-#ifdef CUDA
-  std::vector<float> lJParamsA_;
-  std::vector<float> lJParamsB_;
-  std::vector<int> NBIndex_;
-  int numberAtomTypes_;
 
-  // Arrays on GPU
-  int *NBindex_c_   = NULL;
-  void *molecule_c_  = NULL;
-  void *paramsLJ_c_  = NULL;
-  float *max_c_     = NULL;
-  float *min_c_     = NULL;
-  float *result_w_c_= NULL;
-  float *result_s_c_= NULL;
-  int *result_O_c_  = NULL;
-  int *result_N_c_  = NULL;
-
-  // CUDA only functions
-
-  // In: Action_GIGIST.cpp
-  // line: 1082
-  void freeGPUMemory(void);
-
-  // In: Action_GIGIST.cpp
-  // line: 1107
-  void copyToGPU(void);
-
-#endif
 
 };
 

@@ -25,6 +25,6 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *, int *, int ,
                             int , float *, float *, int , float *, 
                             float *, int, float, int *, int *, float *, float *,
                             int *, int *, bool);
-std::vector<std::vector<float> > doActionCudaEntropy(std::vector<std::vector<Vec3> >, int, int, int, std::vector<std::vector<Quaternion<float> >>, float, float, int);
+std::vector<std::vector<float> > doActionCudaEntropy(std::vector<std::vector<Vec3> >, int, int, int, std::vector<std::vector<Quaternion<float> > >, float, float, int);
 
 #endif

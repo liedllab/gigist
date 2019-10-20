@@ -242,7 +242,7 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
 #ifdef DEBUG_GIST_CUDA
 // Not necessary
 __host__
-std::vector<Quaternion<float>> shoveQuaternionsTest(std::vector<Quaternion<float> > quats) {
+std::vector<Quaternion<float> > shoveQuaternionsTest(std::vector<Quaternion<float> > quats) {
   QuaternionG<float> *quats_c = NULL;
   float *ret_c = NULL;
   std::vector<Quaternion<float> > ret;
@@ -301,7 +301,7 @@ std::vector<Quaternion<float>> shoveQuaternionsTest(std::vector<Quaternion<float
  * @return: A vector holding the values for dTStrans, dTSorient and dTSsix.
  * @throws: A CudaException on error.
  */
-std::vector<std::vector<float> > doActionCudaEntropy(std::vector<std::vector<Vec3> > coords, int x, int y, int z, std::vector<std::vector<Quaternion<float> >> quats, float temp, float rho0, int nFrames) {
+std::vector<std::vector<float> > doActionCudaEntropy(std::vector<std::vector<Vec3> > coords, int x, int y, int z, std::vector<std::vector<Quaternion<float> > > quats, float temp, float rho0, int nFrames) {
   
   // For the CPU
   // Input (from previous calculations)

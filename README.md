@@ -1,8 +1,9 @@
 # GIGIST
 GPU Implementation of GIST
 
-If adding something, or adding this to an already existing cpptraj
-implementation, you have to update the following files (see below):
+For a standard cpptraj installation, a shell script and a patch file has been supplied. After applying the patch.sh shell script, all that remains to be done is to compile cpptraj in the usual way. Preferrably, using `configure gnu -cuda -openmp` and subsequently `make`.
+
+If the cpptraj installation is not a standard installation, the following steps have to be taken:
 + configure
 + src/Makefile
 + src/CMakeList.txt
