@@ -182,7 +182,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
     }
   }
 
-  mprintf("Center: %.1g %.1g %.1g, Dimensions %d %d %d\n"
+  mprintf("Center: %g %g %g, Dimensions %d %d %d\n"
           "  When using this GIST implementation please cite:\n"
           "#    Johannes Kraml, Anna S. Kamenik, Franz Waibl, Michael Schauperl, Klaus R. Liedl, JCTC (2019)\n"
           "#    Steven Ramsey, Crystal Nguyen, Romelia Salomon-Ferrer, Ross C. Walker, Michael K. Gilson, and Tom Kurtzman\n"
