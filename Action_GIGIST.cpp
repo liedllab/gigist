@@ -47,6 +47,7 @@ doorder_(false)
 void Action_GIGist::Help() const {
   mprintf("     Usage:\n"
           "    griddim [dimx dimy dimz]   Defines the dimension of the grid.\n"
+          "    <gridcntr [x y z]>         Defines the center of the grid, default [0 0 0].\n"
           "    <temp 300>                 Defines the temperature of the simulation.\n"
           "    <gridspacn 0.5>            Defines the grid spacing\n"
           "    <refdens 0.0329>           Defines the reference density for the water model.\n"
