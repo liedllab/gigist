@@ -5,6 +5,17 @@
  * Standard constructor
  */
 Action_GIGist::Action_GIGist() :
+#ifdef CUDA
+NBindex_c_(NULL),
+molecule_c_(NULL),
+paramsLJ_c_(NULL),
+max_c_(NULL),
+min_c_(NULL),
+result_w_c_(NULL),
+result_s_c_(NULL),
+result_O_c_(NULL),
+result_N_c_(NULL),
+#endif
 list_(NULL),
 rho0_(0),
 numberSolvent_(0),
@@ -23,6 +34,7 @@ center_(Vec3()),
 gridStart_(Vec3()),
 gridEnd_(Vec3()),
 solvent_(NULL),
+dict_(DataDictionary()),
 datafile_(NULL),
 dxfile_(NULL),
 writeDx_(false),
@@ -38,7 +50,7 @@ void Action_GIGist::Help() const {
           "    <temp 300>                 Defines the temperature of the simulation.\n"
           "    <gridspacn 0.5>            Defines the grid spacing\n"
           "    <refdens 0.0329>           Defines the reference density for the water model.\n"
-          "    <out \"out.dat\">          Defines the name of the output file.\n" 
+          "    <out \"out.dat\">            Defines the name of the output file.\n" 
           "    <dx>                       Set to write out dx files. Population is always written.\n"
 
           "  The griddimensions must be set in integer values and have to be larger than 0.\n"
@@ -89,10 +101,11 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
   this->image_.InitImaging( true );
 
 
+
   if (argList.hasKey("griddim")) {
-    double x = argList.getNextDouble(-1);
-    double y = argList.getNextDouble(-1);
-    double z = argList.getNextDouble(-1);
+    double x = argList.getNextInteger(-1);
+    double y = argList.getNextInteger(-1);
+    double z = argList.getNextInteger(-1);
     if ( (x < 0) || (y < 0) || (z < 0) ) {
       mprinterr("Error: Negative Values for griddimensions not allowed.\n\n");
       return Action::ERR;
@@ -103,9 +116,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
     return Action::ERR;
   }
 
-  
-
-  if (argList.hasKey("gridcntr")) {
+   if (argList.hasKey("gridcntr")) {
     double x = argList.getNextDouble(-1);
     double y = argList.getNextDouble(-1);
     double z = argList.getNextDouble(-1);
@@ -114,6 +125,8 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
     mprintf("Warning: No grid center specified, defaulting to origin!\n\n");
     this->center_.SetVec(0, 0, 0);
   }
+
+
 
 
   if (argList.hasKey("dx")) {
@@ -167,6 +180,18 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
       file->AddDataSet(this->result_.at(i));
     }
   }
+
+  mprintf("Center: %.1g %.1g %.1g, Dimensions %d %d %d\n"
+          "  When using this GIST implementation please cite:\n"
+          "#    Johannes Kraml, Anna S. Kamenik, Franz Waibl, Michael Schauperl, Klaus R. Liedl, JCTC (2019)\n"
+          "#    Steven Ramsey, Crystal Nguyen, Romelia Salomon-Ferrer, Ross C. Walker, Michael K. Gilson, and Tom Kurtzman\n"
+          "#      J. Comp. Chem. 37 (21) 2016\n"
+          "#    Crystal Nguyen, Michael K. Gilson, and Tom Young, arXiv:1108.4876v1 (2011)\n"
+          "#    Crystal N. Nguyen, Tom Kurtzman Young, and Michael K. Gilson,\n"
+          "#      J. Chem. Phys. 137, 044101 (2012)\n"
+          "#    Lazaridis, J. Phys. Chem. B 102, 3531–3541 (1998)\n",
+          this->center_[0], this->center_[1], this->center_[2],
+          (int)this->dimensions_[0], (int)this->dimensions_[1], (int)this->dimensions_[2]);
   
   return Action::OK;
 }
@@ -1057,7 +1082,7 @@ int Action_GIGist::weight(std::string atom) {
  */
 void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
   std::ofstream file;
-  file.open(name);
+  file.open(name.c_str());
   Vec3 origin = this->center_ - this->dimensions_ * (0.5 * this->voxelSize_);
   file << "object 1 class gridpositions counts " << this->dimensions_[0] << " " << this->dimensions_[1] << " " << this->dimensions_[2] << "\n";
   file << "origin " << origin[0] << " " << origin[1] << " " << origin[2] << "\n";
