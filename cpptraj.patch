@@ -1,0 +1,87 @@
+diff -c -r cpptraj_original/configure cpptraj/configure
+*** cpptraj_original/configure	2019-10-23 13:34:39.056102753 +0200
+--- cpptraj/configure	2019-10-23 13:35:21.216377754 +0200
+***************
+*** 2064,2070 ****
+  fi
+  # CUDA
+  if [ $USE_CUDA -eq 1 ] ; then
+!   CUDA_TARGET='cuda_kernels/libcpptraj_cuda.a'
+  fi
+  # Readline
+  if [ "${LIB_STAT[$LREADLINE]}" = 'bundled' ] ; then
+--- 2064,2070 ----
+  fi
+  # CUDA
+  if [ $USE_CUDA -eq 1 ] ; then
+!   CUDA_TARGET='cuda_kernels/libcpptraj_cuda.a cuda_kernel_gist/lib_cuda_gist.a'
+  fi
+  # Readline
+  if [ "${LIB_STAT[$LREADLINE]}" = 'bundled' ] ; then
+Only in cpptraj/src: Action_GIGIST.cpp
+Only in cpptraj/src: Action_GIGIST.h
+diff -c -r cpptraj_original/src/CMakeLists.txt cpptraj/src/CMakeLists.txt
+*** cpptraj_original/src/CMakeLists.txt	2019-10-23 13:34:39.064102805 +0200
+--- cpptraj/src/CMakeLists.txt	2019-10-23 13:35:21.216377754 +0200
+***************
+*** 1,4 ****
+--- 1,5 ----
+  add_subdirectory(xdrfile)
++ add_subdirectory(cuda_kernel_gist)
+  
+  #---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  # Parse cpptrajfiles
+diff -c -r cpptraj_original/src/Command.cpp cpptraj/src/Command.cpp
+*** cpptraj_original/src/Command.cpp	2019-10-23 13:34:39.064102805 +0200
+--- cpptraj/src/Command.cpp	2019-10-23 13:35:21.216377754 +0200
+***************
+*** 112,117 ****
+--- 112,118 ----
+  #include "Action_Spam.h"
+  #include "Action_Temperature.h"
+  #include "Action_GIST.h"
++ #include "Action_GIGIST.h"
+  #include "Action_CreateReservoir.h"
+  #include "Action_Density.h"
+  #include "Action_PairDist.h"
+***************
+*** 311,316 ****
+--- 312,318 ----
+    Command::AddCmd( new Action_FixAtomOrder(),  Cmd::ACT, 1, "fixatomorder" );
+    Command::AddCmd( new Action_FixImagedBonds(),Cmd::ACT, 1, "fiximagedbonds" );
+    Command::AddCmd( new Action_GIST(),          Cmd::ACT, 1, "gist" );
++   Command::AddCmd( new Action_GIGist(),        Cmd::ACT, 1, "gigist" );
+    Command::AddCmd( new Action_GridFreeEnergy(),Cmd::ACT, 1, "gfe" ); // HIDDEN
+    Command::AddCmd( new Action_Grid(),          Cmd::ACT, 1, "grid" );
+    Command::AddCmd( new Action_HydrogenBond(),  Cmd::ACT, 1, "hbond" );
+diff -c -r cpptraj_original/src/cpptrajfiles cpptraj/src/cpptrajfiles
+*** cpptraj_original/src/cpptrajfiles	2019-10-23 13:34:39.072102857 +0200
+--- cpptraj/src/cpptrajfiles	2019-10-23 13:35:21.216377754 +0200
+***************
+*** 38,43 ****
+--- 38,44 ----
+          Action_FixAtomOrder.cpp \
+          Action_FixImagedBonds.cpp \
+          Action_GIST.cpp \
++         Action_GIGIST.cpp \
+          Action_Grid.cpp \
+          Action_GridFreeEnergy.cpp \
+          Action_HydrogenBond.cpp \
+Only in cpptraj/src: cuda_kernel_gist
+Only in cpptraj/src: ExceptionsGIST.h
+diff -c -r cpptraj_original/src/Makefile cpptraj/src/Makefile
+*** cpptraj_original/src/Makefile	2019-10-23 13:34:39.068102831 +0200
+--- cpptraj/src/Makefile	2019-10-23 13:35:21.216377754 +0200
+***************
+*** 98,103 ****
+--- 98,106 ----
+  cuda_kernels/libcpptraj_cuda.a: ../external.config.h
+  	cd cuda_kernels && $(MAKE) all
+  
++ cuda_kernel_gist/lib_cuda_gist.a:
++ 	cd cuda_kernel_gist/ && $(MAKE) all
++ 
+  # Dependency targets
+  findDepend: FindDepend.o 
+  	$(CXX) -o findDepend FindDepend.o
+Only in cpptraj/src: Quaternion.h
