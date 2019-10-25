@@ -102,11 +102,11 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
   this->image_.InitImaging( true );
 
 
-
-  if (argList.hasKey("griddim")) {
-    double x = argList.getNextInteger(-1);
-    double y = argList.getNextInteger(-1);
-    double z = argList.getNextInteger(-1);
+  if (argList.Contains("griddim")) {
+    ArgList dimArgs = argList.GetNstringKey("griddim", 3);
+    double x = dimArgs.getNextInteger(-1);
+    double y = dimArgs.getNextInteger(-1);
+    double z = dimArgs.getNextInteger(-1);
     if ( (x < 0) || (y < 0) || (z < 0) ) {
       mprinterr("Error: Negative Values for griddimensions not allowed.\n\n");
       return Action::ERR;
@@ -117,10 +117,11 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
     return Action::ERR;
   }
 
-   if (argList.hasKey("gridcntr")) {
-    double x = argList.getNextDouble(-1);
-    double y = argList.getNextDouble(-1);
-    double z = argList.getNextDouble(-1);
+  if (argList.Contains("gridcntr")) {
+    ArgList cntrArgs = argList.GetNstringKey("gridcntr", 3);
+    double x = cntrArgs.getNextDouble(-1);
+    double y = cntrArgs.getNextDouble(-1);
+    double z = cntrArgs.getNextDouble(-1);
     this->center_.SetVec(x, y ,z);
   } else {
     mprintf("Warning: No grid center specified, defaulting to origin!\n\n");
