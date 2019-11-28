@@ -9,8 +9,8 @@ Action_GIGist::Action_GIGist() :
 NBindex_c_(NULL),
 molecule_c_(NULL),
 paramsLJ_c_(NULL),
-max_c_(NULL),
-min_c_(NULL),
+max_c_(NULL), // TODO: unused
+min_c_(NULL), // TODO: unused
 result_w_c_(NULL),
 result_s_c_(NULL),
 result_O_c_(NULL),
@@ -38,7 +38,8 @@ dict_(DataDictionary()),
 datafile_(NULL),
 dxfile_(NULL),
 writeDx_(false),
-doorder_(false)
+doorder_(false),
+use_com_(false)
 {}
 
 /**
@@ -63,7 +64,7 @@ void Action_GIGist::Help() const {
           "  in this code is probably slower than the original GIST implementation.\n\n"
 
           "  When using this GIST implementation please cite:\n"
-          "#    Johannes Kraml, Anna S. Kamenik, Franz Waibl, Michael Schauperl, Klaus R. Liedl, JCTC (2019), ACCEPTED\n"
+          "#    Johannes Kraml, Anna S. Kamenik, Franz Waibl, Michael Schauperl, Klaus R. Liedl, JCTC (2019)\n"
           "#    Steven Ramsey, Crystal Nguyen, Romelia Salomon-Ferrer, Ross C. Walker, Michael K. Gilson, and Tom Kurtzman\n"
           "#      J. Comp. Chem. 37 (21) 2016\n"
           "#    Crystal Nguyen, Michael K. Gilson, and Tom Young, arXiv:1108.4876v1 (2011)\n"
@@ -142,6 +143,10 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
   if (argList.hasKey("doorder")) {
     this->doorder_ = true;
   }
+
+	if (argList.hasKey("com")) {
+		this->use_com_ = true;
+	}
 
 
   if (argList.hasKey("out")) {
@@ -307,6 +312,14 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
  * @return: Action::ERR on error, Action::OK if everything ran smoothly.
  */
 Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
+	if (this->nFrames_ < 1 && this->use_com_) {
+		for (Topology::mol_iterator mol_iter = this->top_->MolStart(); mol_iter != this->top_->MolEnd(); ++mol_iter) {
+			if (mol_iter->IsSolvent()) {
+				Vec3 com = this->calcCenterOfMass(mol_iter->BeginAtom(), mol_iter->EndAtom(), frame);
+				break;
+			}
+		}
+	}
   this->nFrames_++;
   std::vector<DOUBLE_O_FLOAT> eww_result(this->numberAtoms_);
   std::vector<DOUBLE_O_FLOAT> esw_result(this->numberAtoms_);
@@ -674,6 +687,7 @@ void Action_GIGist::Print() {
    * 1) The RAM on the GPU is far less than the main memory
    * 2) It does not speed up the calculation significantly enough
    * However, this can be changed if wished for (It is not yet stable enough to be used)
+	 * Tests are ongoing
    */
   #ifdef CUDA_UPDATED
   std::vector<std::vector<float> > dTSTest = doActionCudaEntropy(this->waterCoordinates_, this->dimensions_[0], this->dimensions_[1],
@@ -710,6 +724,7 @@ void Action_GIGist::Print() {
     // Only calculate if there is actually water molecules at that position.
     if (this->result_.at(this->dict_.getIndex("population"))->operator[](voxel) > 0) {
       double pop = this->result_.at(this->dict_.getIndex("population"))->operator[](voxel);
+			// Used for calcualtion of the Entropy on the GPU
       #ifdef CUDA_UPDATED
       dTSorient_norm          = dTSTest.at(1).at(voxel);
       dTStrans_norm           = dTSTest.at(0).at(voxel);
@@ -789,28 +804,6 @@ void Action_GIGist::Print() {
   }
   this->datafile_->Printf("\n");
 
-// Ignore this part as it needs great amounts of space
-#ifdef BEAUTIFUL_OUTPUT
-  for (unsigned int voxel = 0; voxel < this->nVoxels_; ++voxel) {
-    size_t i, j, k;
-    this->result_.at(this->dict_.getIndex("population"))->ReverseIndex(voxel, i, j, k);
-    Vec3 coords = this->result_.at(this->dict_.getIndex("population"))->Bin().Center(i, j, k);
-    this->datafile_->Printf("% 11d%11.3f%11.3f%11.3f%18.0f%18.3f%18.3f%18.3f%18.3f%18.3f%18.3f%18.3f%18.3f%18.3f%18.3f\n", 
-                            voxel, coords[0], coords[1], coords[2],
-                            this->result_.at(this->dict_.getIndex("population"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("dTStrans_dens"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("dTStrans_norm"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("dTSorient_dens"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("dTSorient_norm"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("dTSsix_dens"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("dTSsix_norm"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("Esw_dens"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("Esw_norm"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("Eww_dens"))->operator[](voxel),
-                            this->result_.at(this->dict_.getIndex("Eww_norm"))->operator[](voxel)
-                            );
-  }
-#endif
   // Final output, the DX files are done automatically by cpptraj
   // so only the standard GIST-format is done here
   ProgressBar progBarIO(this->nVoxels_);
@@ -871,7 +864,7 @@ void Action_GIGist::Print() {
 
 /**
  * Calculate the Van der Waals and electrostatic energy.
- * @argument frm: The frame for which to calculate the energy.
+ * @argument r_2: The squared distance between atom 1 and atom 2.
  * @argument a1: The first atom.
  * @argument a2: The second atom.
  * @return: The interaction energy between the two atoms.
@@ -914,7 +907,7 @@ double Action_GIGist::calcDistanceSqrd(ActionFrame &frm, int a1, int a2) {
  * Calculate the electrostatic energy between two atoms, as
  * follows from:
  * E(el) = q1 * q2 / r
- * @argument r_2: The squared distance between the atoms.
+ * @argument r_2_i: The inverse of the squared distance between the atoms.
  * @argument a1: The atom index of atom 1.
  * @argument a2: The atom index of atom 2.
  * @return: The electrostatic energy.
@@ -932,7 +925,7 @@ double Action_GIGist::calcElectrostaticEnergy(double r_2_i, int a1, int a2) {
  * two different atoms, as follows:
  * E(vdw) = A / (r ** 12) - B / (r ** 6)
  * Be aware that the inverse is used, as to calculate faster.
- * @argument r_2: The squared distance between the two atoms.
+ * @argument r_2_i: The inverse of the squared distance between the two atoms.
  * @argument a1: The atom index of atom1.
  * @argument a2: The atom index of atom2.
  * @return: The VdW interaction energy.
@@ -950,7 +943,7 @@ double Action_GIGist::calcVdWEnergy(double r_2_i, int a1, int a2) {
  * Calculate the orientational entropy of the water atoms
  * in a given voxel.
  * @argument voxel: The index of the voxel.
- * @return: The entropy of the water atoms in that voxel.
+ * @return: The entropy of the water molecules in that voxel.
  */
 std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
   std::vector<double> ret(2);
@@ -1079,8 +1072,8 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
  * Calculates the distance between the different atoms in the voxels.
  * Both, for the distance in space, as well as the angular distance.
  * @argument voxel1: The first of the two voxels.
- * @argument n0: The water molecule of the first voxel.
  * @argument voxel2: The voxel to compare voxel1 to.
+ * @argument n0: The water molecule of the first voxel.
  * @argument NNd: The lowest distance in space. If the calculated one
  *                is smaller, saves it here.
  * @argument NNs: The lowest distance in angular space. If the calculated
@@ -1104,6 +1097,11 @@ void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double 
   }
 } 
 
+/**
+ * A weighting for the different elements.
+ * @argument atom: A string holding the element symbol.
+ * @return a weight for that particular element.
+ **/
 int Action_GIGist::weight(std::string atom) {
   if (atom.compare("S") == 0) {
     return 0;
@@ -1148,6 +1146,26 @@ void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
     i++;
   }
   file << std::endl;
+}
+
+Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, ActionFrame frame) {
+	double mass = 0;
+	double x = 0, y = 0, z = 0;
+	for (int i = atom_begin; i < atom_end; ++i) {
+		double currentMass = this->top_->Atoms()[i].Mass();
+		const double * coords = frame.Frm().XYZ(i);
+		x += coords[0] * currentMass;
+		y += coords[1] * currentMass;
+		z += coords[2] * currentMass;
+		mass += currentMass;
+	}
+	Vec3 X = Vec3(frame.Frm().XYZ(atom_begin + 1)) - Vec3(frame.Frm().XYZ(atom_begin));
+	Vec3 Y = Vec3(frame.Frm().XYZ(atom_begin + 2)) - Vec3(frame.Frm().XYZ(atom_begin));
+	Quaternion<double> quat = Quaternion<double>(X, Y);
+	Vec3 coord = Vec3();
+	coord.SetVec(x / mass, y / mass, z / mass);
+	quat.rotate(coord);
+	return coord;
 }
 
 // Functions used when CUDA is specified.
