@@ -258,6 +258,8 @@ private:
   // line: 1105
   void writeDxFile(std::string, std::vector<double>);
 
+	Vec3 calcCenterOfMass(int, int, ActionFrame);
+
 
   // Functions defined for FEBISS implementation
 
@@ -407,6 +409,7 @@ private:
   std::vector<int> solventAtomCounter_;
   bool writeDx_;
   bool doorder_;
+	bool use_com_;
 
   Timer tRot_;
   Timer tEadd_;
