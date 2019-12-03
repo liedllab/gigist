@@ -56,6 +56,13 @@ public:
 template <class T>
 class Quaternion {
 public:
+
+	Quaternion<T>() {
+		this->w_ = 0.0;
+    this->x_ = 0.0;
+    this->y_ = 0.0;
+    this->z_ = 0.0;
+	}
   /**
    * Constructor from a given set of quaternion coordinates.
    * @argument w: From the Quaternion theory.
@@ -217,6 +224,10 @@ public:
     return Quaternion<T>(w, x, y, z);
   }
 
+	/**
+	 * Invert the Quaternion, creating a Quaternion with the exact inverse rotation.
+	 * @return: A new quaternion holding the roation in the other direction.
+	 */
   Quaternion<T> invert( void ) {
     return Quaternion<T>( this->w_, this->x_ * -1, this->y_ * -1, this->z_ * -1);
   }
