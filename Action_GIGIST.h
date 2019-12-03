@@ -258,7 +258,13 @@ private:
   // line: 1105
   void writeDxFile(std::string, std::vector<double>);
 
-	Vec3 calcCenterOfMass(int, int, ActionFrame);
+	Vec3 calcCenterOfMass(int atom_begin, int atom_end, const double *coordinates);
+
+	int bin(int begin, int end, Vec3 vec, ActionFrame frame);
+
+	void calcDipole(int begin, int end, int voxel, ActionFrame frame);
+
+	Quaternion<DOUBLE_O_FLOAT> calcQuaternion(std::vector<Vec3> molAtomCoords, Vec3 center, int headAtomIndex);
 
 
   // Functions defined for FEBISS implementation
@@ -388,6 +394,7 @@ private:
   std::vector<DOUBLE_O_FLOAT> charges_;
   std::vector<int> molecule_;
   std::vector<int> atomTypes_;
+	std::vector<double> masses_;
 
   // Is a usual array, as std::vector<bool> is actually not a vector storing boolean
   // values but a bit string with the boolean values encoded at each position.
