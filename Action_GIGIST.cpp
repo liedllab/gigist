@@ -143,13 +143,13 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
     this->doorder_ = true;
   }
 
-	if (argList.hasKey("com")) {
-		this->use_com_ = true;
-	}
+  if (argList.hasKey("com")) {
+    this->use_com_ = true;
+  }
 
-
-  if (argList.hasKey("out")) {
-    this->datafile_ = actionInit.DFL().AddCpptrajFile( argList.GetStringNext(), "GIST output" );
+  if (argList.Contains("out")) {
+		ArgList outArgs = argList.GetNstringKey("out", 1);
+    this->datafile_ = actionInit.DFL().AddCpptrajFile( outArgs.GetStringNext(), "GIST output" );
   } else {
     this->datafile_ = actionInit.DFL().AddCpptrajFile( "out.dat", "GIST output" );
   }
@@ -234,6 +234,7 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
       this->molecule_.push_back( setup.Top()[mol->BeginAtom() + i].MolNum() );
       this->charges_.push_back( setup.Top()[mol->BeginAtom() + i].Charge() );
       this->atomTypes_.push_back( setup.Top()[mol->BeginAtom() + i].TypeIndex() );
+      this->masses_.push_back( setup.Top()[mol->BeginAtom() + i].Mass());
 
       // Check if the molecule is a solvent, either by the topology parameters or because force was set.
       if ( (mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( setup.Top()[mol->BeginAtom()].MolNum() >= this->forceStart_ )) ) {
@@ -311,14 +312,14 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
  * @return: Action::ERR on error, Action::OK if everything ran smoothly.
  */
 Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
-	if (this->nFrames_ < 1 && this->use_com_) {
-		for (Topology::mol_iterator mol_iter = this->top_->MolStart(); mol_iter != this->top_->MolEnd(); ++mol_iter) {
-			if (mol_iter->IsSolvent()) {
-				Vec3 com = this->calcCenterOfMass(mol_iter->BeginAtom(), mol_iter->EndAtom(), frame);
-				break;
-			}
-		}
-	}
+/*  if (this->nFrames_ < 1 && this->use_com_) {
+    for (Topology::mol_iterator mol_iter = this->top_->MolStart(); mol_iter != this->top_->MolEnd(); ++mol_iter) {
+      if (mol_iter->IsSolvent()) {
+        Vec3 com = this->calcCenterOfMass(mol_iter->BeginAtom(), mol_iter->EndAtom(), frame);
+        break;
+      }
+    }
+  }*/
   this->nFrames_++;
   std::vector<DOUBLE_O_FLOAT> eww_result(this->numberAtoms_);
   std::vector<DOUBLE_O_FLOAT> esw_result(this->numberAtoms_);
@@ -403,8 +404,6 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
     onGrid.at(i) = false;
   }
 
-  std::vector<Vec3> atomCoords(this->nVoxels_);
-
   #if defined _OPENMP && defined CUDA
   this->tHead_.Start();
   #pragma omp parallel for
@@ -417,12 +416,22 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       // Keep voxel at -1 if it is not possible to put it on the grid
       int voxel = -1;
       std::vector<Vec3> molAtomCoords;
+      Vec3 com{0, 0, 0};
+
+      // If center of mass should be used, use this part.
+      if (this->use_com_) {
+        int mol_begin{ mol->BeginAtom() };
+        int mol_end{ mol->EndAtom() };
+        com = this->calcCenterOfMass(mol_begin, mol_end, frame.Frm().XYZ(mol_begin)) ;
+        voxel = this->bin(mol_begin, mol_end, com, frame);
+      }
+      
+
       #if !defined _OPENMP && !defined CUDA
       this->tHead_.Start();
       #endif
       for (int atom1 = mol->BeginAtom(); atom1 < mol->EndAtom(); ++atom1) {
-        size_t bin_i, bin_j, bin_k;
-        bool first = true;
+        bool first{ true };
         if (this->solvent_[atom1]) { // Do we need that?
           // Save coords for later use.
           const double *vec = frame.Frm().XYZ(atom1);
@@ -430,44 +439,25 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           // Check if atom is "Head" atom of the solvent
           // Could probably save some time here by writing head atom indices into an array.
           // TODO: When assuming fixed atom position in topology, should be very easy.
-          if ( std::string((*this->top_)[atom1].ElementName()).compare(this->centerSolventAtom_) == 0 && first ) {
+          if ( !this->use_com_ && std::string((*this->top_)[atom1].ElementName()).compare(this->centerSolventAtom_) == 0 && first ) {
             // Try to bin atom1 onto the grid. If it is possible, get the index and keep working,
             // if not, calculate the energies between all atoms to this point.
-            if ( this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k) ) {
-              voxel = this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k);
-              headAtomIndex = atom1 - mol->BeginAtom();
-              atomCoords.at(voxel) = Vec3(vec[0], vec[1], vec[2]);
-              // Does not necessarily need this
-              this->waterCoordinates_.at(voxel).push_back(frame.Frm().XYZ(atom1));
-              // Does not necessarily need this
-              this->resultV_.at(this->dict_.getIndex(this->centerSolventAtom_) - this->result_.size()).at(voxel) += 1.0;
-              
-              #if !defined _OPENMP && !defined CUDA
-              this->tDipole_.Start();
-              #endif
-              double DPX = 0;
-              double DPY = 0;
-              double DPZ = 0;
-              for (int atoms = mol->BeginAtom(); atoms < mol->EndAtom(); ++atoms) {
-                onGrid.at(atoms) = true;
-                const double *XYZ = frame.Frm().XYZ(atoms);
-                DPX += this->top_->operator[](atoms).Charge() * XYZ[0];
-                DPY += this->top_->operator[](atoms).Charge() * XYZ[1];
-                DPZ += this->top_->operator[](atoms).Charge() * XYZ[2];
-              }
-              this->result_.at(this->dict_.getIndex("dipole_xtemp"))->UpdateVoxel(voxel, DPX);
-              this->result_.at(this->dict_.getIndex("dipole_ytemp"))->UpdateVoxel(voxel, DPY);
-              this->result_.at(this->dict_.getIndex("dipole_ztemp"))->UpdateVoxel(voxel, DPZ);
-              #if !defined _OPENMP && !defined CUDA
-              this->tDipole_.Stop();
-              #endif
-            }
+            voxel = this->bin(mol->BeginAtom(), mol->EndAtom(), vec, frame);
+            headAtomIndex = atom1 - mol->BeginAtom();
             first = false;
           } else {
+            size_t bin_i{}, bin_j{}, bin_k{};
             if ( this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k) ) {
               std::string aName = this->top_->operator[](atom1).ElementName();
               int voxTemp = this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k);
+							#ifdef _OPENMP
+							#pragma omp critical
+							{
+							#endif
               this->resultV_.at(this->dict_.getIndex(aName) - this->result_.size()).at(voxTemp) += 1.0;
+							#ifdef _OPENMP
+							}
+							#endif
             }
           }
         }
@@ -513,14 +503,27 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           }
         }
 
+        Quaternion<DOUBLE_O_FLOAT> quat{};
         
-        // Create Quaternion for the rotation from the new coordinate system to the lab coordinate system.
-        Quaternion<DOUBLE_O_FLOAT> quat(X, Y);
+        // Create Quaternion for the rotation from the new coordintate system to the lab coordinate system.
+        if (!this->use_com_) {
+          quat = this->calcQuaternion(molAtomCoords, molAtomCoords.at(headAtomIndex), headAtomIndex);
+        } else {
+          // -1 Will never evaluate to true, so in the funciton it will have no consequence.
+          quat = this->calcQuaternion(molAtomCoords, com, -1);
+        }
         // The Quaternion would create the rotation of the lab coordinate system onto the
         // calculated solvent coordinate system. The invers quaternion is exactly the rotation of
         // the solvent coordinate system onto the lab coordinate system.
         quat.invert();
+        #ifdef _OPENMP
+        #pragma omp critical
+        {
+        #endif
         this->quaternions_.at(voxel).push_back(quat);
+        #ifdef _OPENMP
+        }
+        #endif
 
         #if !defined _OPENMP && !defined CUDA
         this->tRot_.Stop();
@@ -568,8 +571,14 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
               sum += (cosThet + 1.0/3) * (cosThet + 1.0/3);
             }
           }
-        
+          #ifdef _OPENMP
+          #pragma omp critical
+          {
+          #endif
           this->result_.at(this->dict_.getIndex("order"))->UpdateVoxel(voxel, 1.0 - (3.0/8.0) * sum);
+          #ifdef _OPENMP
+          }
+          #endif
         }
         this->result_.at(this->dict_.getIndex("neighbour"))->UpdateVoxel(voxel, result_n.at(mol->BeginAtom() + headAtomIndex));
         // End of calculation of the order parameters
@@ -577,12 +586,19 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         #ifndef _OPENMP
         this->tEadd_.Start();
         #endif
+        #ifdef _OPENMP
+        #pragma omp critical
+        {
+        #endif
         // There is absolutely nothing to check here, as the solute can not be in place here.
         for (int atom = mol->BeginAtom(); atom < mol->EndAtom(); ++atom) {
           // Just adds up all the interaction energies for this voxel.
           this->result_.at(this->dict_.getIndex("Eww"))->UpdateVoxel(voxel, (double)eww_result.at(atom));
           this->result_.at(this->dict_.getIndex("Esw"))->UpdateVoxel(voxel, (double)esw_result.at(atom));
         }
+        #ifdef _OPENMP
+        }
+        #endif
         #ifndef _OPENMP
         this->tEadd_.Stop();
         #endif
@@ -649,7 +665,14 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
                   nearestWaters.at(3) = Vec3(frame.Frm().XYZ(atom2)) - Vec3(frame.Frm().XYZ(atom1));
                 }
                 if (r_2 < this->neighbourCut2_) {
+                  #ifdef _OPENMP
+                  #pragma omp critical
+                  {
+                  #endif
                   this->result_.at(this->dict_.getIndex("neighbour"))->UpdateVoxel(voxel, 1);
+                  #ifdef _OPENMP
+                  }
+                  #endif
                 }
               }
             }
@@ -662,10 +685,17 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
               sum += (cosThet + 1.0/3) * (cosThet + 1.0/3);
             }
           }
+          #ifdef _OPENMP
+          #pragma omp critical
+          {
+          #endif
           this->result_.at(this->dict_.getIndex("order"))->UpdateVoxel(voxel, 1.0 - (3.0/8.0) * sum);
           eww /= 2.0;
           this->result_.at(this->dict_.getIndex("Eww"))->UpdateVoxel(voxel, eww);
           this->result_.at(this->dict_.getIndex("Esw"))->UpdateVoxel(voxel, esw);
+          #ifdef _OPENMP
+          }
+          #endif
         }
       }
 #endif
@@ -686,7 +716,7 @@ void Action_GIGist::Print() {
    * 1) The RAM on the GPU is far less than the main memory
    * 2) It does not speed up the calculation significantly enough
    * However, this can be changed if wished for (It is not yet stable enough to be used)
-	 * Tests are ongoing
+   * Tests are ongoing
    */
   #ifdef CUDA_UPDATED
   std::vector<std::vector<float> > dTSTest = doActionCudaEntropy(this->waterCoordinates_, this->dimensions_[0], this->dimensions_[1],
@@ -723,7 +753,7 @@ void Action_GIGist::Print() {
     // Only calculate if there is actually water molecules at that position.
     if (this->result_.at(this->dict_.getIndex("population"))->operator[](voxel) > 0) {
       double pop = this->result_.at(this->dict_.getIndex("population"))->operator[](voxel);
-			// Used for calcualtion of the Entropy on the GPU
+      // Used for calcualtion of the Entropy on the GPU
       #ifdef CUDA_UPDATED
       dTSorient_norm          = dTSTest.at(1).at(voxel);
       dTStrans_norm           = dTSTest.at(0).at(voxel);
@@ -1147,26 +1177,155 @@ void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
   file << std::endl;
 }
 
-Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, ActionFrame frame) {
-	double mass = 0;
-	double x = 0, y = 0, z = 0;
-	for (int i = atom_begin; i < atom_end; ++i) {
-		double currentMass = this->top_->Atoms()[i].Mass();
-		const double * coords = frame.Frm().XYZ(i);
-		x += coords[0] * currentMass;
-		y += coords[1] * currentMass;
-		z += coords[2] * currentMass;
-		mass += currentMass;
-	}
-	Vec3 X = Vec3(frame.Frm().XYZ(atom_begin + 1)) - Vec3(frame.Frm().XYZ(atom_begin));
-	Vec3 Y = Vec3(frame.Frm().XYZ(atom_begin + 2)) - Vec3(frame.Frm().XYZ(atom_begin));
-	Quaternion<double> quat = Quaternion<double>(X, Y);
-	Vec3 coord = Vec3();
-	coord.SetVec(x / mass, y / mass, z / mass);
-	quat.rotate(coord);
-	return coord;
+/**
+ * Calculate the center of mass for a set of atoms. These atoms do not necessarily need
+ * to belong to the same molecule, but in this case do.
+ * @argument atom_begin: The first atom in the set.
+ * @argument atom_end: The index of the last atom in the set.
+ * @argument coords: The current coordinates, on which processing occurs.
+ * @return A vector, of class Vec3, holding the center of mass.
+ */
+Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, const double *coords) {
+  double mass = 0;
+  double x = 0, y = 0, z = 0;
+  for (int i = 0; i < (atom_end - atom_begin); ++i) {
+    double currentMass = this->masses_.at(i + atom_begin);
+    x += coords[i * 3    ] * currentMass;
+    y += coords[i * 3 + 1] * currentMass;
+    z += coords[i * 3 + 2] * currentMass;
+    mass += currentMass;
+  }
+  Vec3 coord{x / mass, y / mass, z / mass};
+  return coord;
 }
 
+/**
+ * A function to bin a certain vector to a grid. This still does more, will be fixed.
+ * FIXME: Refactor further, so that 
+ * @argument begin: The first atom in the molecule.
+ * @argument end: The last atom in the molecule.
+ * @argument vec: The vector to be binned.
+ * @argument frame: The current frame.
+ * @return The voxel this frame was binned into. If binning was not succesfull, returns -1.
+ */
+int Action_GIGist::bin(int begin, int end, Vec3 vec, ActionFrame frame) {
+  size_t bin_i{}, bin_j{}, bin_k{};
+  // This is set to -1, if binning is not possible, the function will return a nonsensical value of -1, which can be tested.
+  int voxel{ -1 };
+  if (this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k))
+  {
+    voxel = this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k);
+		
+    // Does not necessarily need this in this function
+    this->waterCoordinates_.at(voxel).push_back(vec);
+
+		#ifdef _OPENMP
+		#pragma omp critical
+		{
+		#endif
+		this->result_.at(this->dict_.getIndex("population"))->UpdateVoxel(voxel, 1.0);
+		if (!this->use_com_) {
+    	this->resultV_.at(this->dict_.getIndex(this->centerSolventAtom_) - this->result_.size()).at(voxel) += 1.0;
+		}
+		#ifdef _OPENMP
+		}
+		#endif
+
+    this->calcDipole(begin, end, voxel, frame);
+
+  }
+  return voxel;
+}
+
+/**
+ * Calculates the total dipole for a given set of atoms.
+ * @argument begin: The index of the first atom of the set.
+ * @argument end: The index of the last atom of the set.
+ * @argument voxel: The voxel in which the values should be binned (FIXME: Change that the function returns a value)
+ * @argument frame: The current frame.
+ * @return Nothing at the moment (TODO: Check fixme)
+ */
+void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame) {
+  #if !defined _OPENMP && !defined CUDA
+    this->tDipole_.Start();
+#endif
+    double DPX{ 0 };
+    double DPY{ 0 };
+    double DPZ{ 0 };
+    for (int atoms = begin; atoms < end; ++atoms)
+    {
+      const double *XYZ = frame.Frm().XYZ(atoms);
+      double charge{ this->top_->operator[](atoms).Charge() };
+      DPX += charge * XYZ[0];
+      DPY += charge * XYZ[1];
+      DPZ += charge * XYZ[2];
+    }
+
+		#ifdef _OPENMP
+		#pragma omp critical
+		{
+		#endif
+    this->result_.at(this->dict_.getIndex("dipole_xtemp"))->UpdateVoxel(voxel, DPX);
+    this->result_.at(this->dict_.getIndex("dipole_ytemp"))->UpdateVoxel(voxel, DPY);
+    this->result_.at(this->dict_.getIndex("dipole_ztemp"))->UpdateVoxel(voxel, DPZ);
+		#ifdef _OPENMP
+		}
+		#endif
+#if !defined _OPENMP && !defined CUDA
+    this->tDipole_.Stop();
+#endif
+}
+
+/**
+ * Calculate the quaternion as a rotation when a certain center is given
+ * and a set of atomic coordinates are supplied. If the center coordinates
+ * are actually one of the atoms, headAtomIndex should evaluate to that
+ * atom, if this is not done, unexpexted behaviour might occur.
+ * If the center is set to something other than an atomic position,
+ * headAtomIndex should evaluate to a nonsensical number (preferrably
+ * a negative value).
+ * @argument molAtomCoords: The set of atomic cooordinates, saved as a vector
+ *                           of Vec3 objects.
+ * @argument center: The center coordinates.
+ * @argument headAtomIndex: The index of the head atom, when counting the first
+ *                           atom as 0, as indices naturally do.
+ * @return: A quaternion holding the rotational value.
+ */
+Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> molAtomCoords, Vec3 center, int headAtomIndex) {
+  Vec3 X;
+  Vec3 Y;
+  bool setX = false;
+  bool setY = false;    
+  for (unsigned int i = 0; i < molAtomCoords.size(); ++i) {
+    if ((int)i != headAtomIndex) {
+      if (setX && !setY) {
+        Y.SetVec(molAtomCoords.at(i)[0] - center[0], 
+                  molAtomCoords.at(i)[1] - center[1], 
+                  molAtomCoords.at(i)[2] - center[2]);
+        Y.Normalize();
+        setY = true;
+      }
+      if (!setX) {
+        X.SetVec(molAtomCoords.at(i)[0] - center[0], 
+                  molAtomCoords.at(i)[1] - center[1], 
+                  molAtomCoords.at(i)[2] - center[2]);
+        X.Normalize();
+        setX = true;
+      }
+      if (setX && setY) {
+        break;
+      }
+    }
+  }
+
+   // Create Quaternion for the rotation from the new coordintate system to the lab coordinate system.
+   Quaternion<DOUBLE_O_FLOAT> quat(X, Y);
+   // The Quaternion would create the rotation of the lab coordinate system onto the
+   // calculated solvent coordinate system. The invers quaternion is exactly the rotation of
+   // the solvent coordinate system onto the lab coordinate system.
+   quat.invert();
+   return quat;
+}
 // Functions used when CUDA is specified.
 #ifdef CUDA
 
