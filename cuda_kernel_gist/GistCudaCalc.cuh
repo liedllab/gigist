@@ -8,31 +8,31 @@
 #define BLOCKSIZE 16
 #define SLOW_BLOCKSIZE 512
 
-class Test {
+class Coordinates_GPU {
 public:
   float x;
   float y;
   float z;
 
   __host__ __device__
-  Test(): x(0), y(0), z(0) {}
+  Coordinates_GPU(): x(0), y(0), z(0) {}
 
   __host__ __device__
-  Test(const double *array) {
+  Coordinates_GPU(const double *array) {
     this->x = array[0];
     this->y = array[1];
     this->z = array[2];
   }
 
   __host__ __device__
-  Test(const Test &other) {
+  Coordinates_GPU(const Coordinates_GPU &other) {
     this->x = other.x;
     this->y = other.y;
     this->z = other.z;
   }
 
   __host__ __device__
-  Test &operator=(const Test &other) {
+  Coordinates_GPU &operator=(const Coordinates_GPU &other) {
     this->x = other.x;
     this->y = other.y;
     this->z = other.z;
@@ -246,7 +246,7 @@ __device__ bool isOnGrid(float *, float *, float *);
 __device__ float calcDist(float *, float *, BoxInfo, UnitCell);
 
 // Global functions
-__global__ void cudaCalcEnergy    (Test *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *, float *, float *, int, float, int *, int *);
-__global__ void cudaCalcEnergySlow(Test *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *,	float *, float *, int, float, int *, int *);
+__global__ void cudaCalcEnergy    (Coordinates_GPU *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *, float *, float *, int, float, int *, int *);
+__global__ void cudaCalcEnergySlow(Coordinates_GPU *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *,	float *, float *, int, float, int *, int *);
 __global__ void calculateEntropy(EntropyCalculator entCalc, float *, float *, float *);
 #endif
