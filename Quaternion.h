@@ -1,8 +1,9 @@
 #ifndef QUATERNION_H
 #define QUATERNION_H
 
+#include <cmath>
+
 #include "ExceptionsGIST.h"
-#include <math.h>
 #ifndef TESTS
 #include "Vec3.h"
 #include "Constants.h"
@@ -57,18 +58,18 @@ template <class T>
 class Quaternion {
 public:
 
-	Quaternion<T>() {
-		this->w_ = 0.0;
+  Quaternion<T>() {
+    this->w_ = 0.0;
     this->x_ = 0.0;
     this->y_ = 0.0;
     this->z_ = 0.0;
-	}
+  }
   /**
    * Constructor from a given set of quaternion coordinates.
-   * @argument w: From the Quaternion theory.
-   * @argument x: From the Quaternion theory.
-   * @argument y: From the Quaternion theory.
-   * @argument z: From the Quaternion theory.
+   * @param w: From the Quaternion theory.
+   * @param x: From the Quaternion theory.
+   * @param y: From the Quaternion theory.
+   * @param z: From the Quaternion theory.
    */
   Quaternion<T>(T w, T x, T y, T z) {
     this->w_ = w;
@@ -85,8 +86,8 @@ public:
    * | 0 0 1 |
    * onto the two vectors. So to create the rotation of the vectors onto
    * the lab coordinate system, the quaternion has to be inverted.
-   * @argument X: The X-Vector, that will be aligned with the X-Axis.
-   * @argument V2: The second vector, this is not necessarily the Y-Axis.
+   * @param X: The X-Vector, that will be aligned with the X-Axis.
+   * @param V2: The second vector, this is not necessarily the Y-Axis.
    *               But will be orthogonal to the Z axis and in the X-Y plane.
    */
   Quaternion<T>(Vec3 X, Vec3 V2) {
@@ -150,8 +151,8 @@ public:
    * x = x1 * sin(theta / 2)
    * y = y1 * sin(theta / 2)
    * z = z1 * sin(theta / 2)
-   * @argument angle: The angle for the rotation.
-   * @argument turnVec: The vector around which the rotation will occur.
+   * @param angle: The angle for the rotation.
+   * @param turnVec: The vector around which the rotation will occur.
    */
   Quaternion<T>(T angle, Vec3 turnVec) {
     this->w_ = cos(angle / 2.0);
@@ -163,7 +164,7 @@ public:
 
   /**
    * The assignment operator.
-   * @argument other: The Quaternion to be assigned.
+   * @param other: The Quaternion to be assigned.
    * @return: The updated Quaternion.
    */
   Quaternion<T> &operator=(Quaternion<T> other) {
@@ -176,7 +177,7 @@ public:
 
   /**
    * Bracket operator.
-   * @argument idx: The index to access;
+   * @param idx: The index to access;
    * @return: The element stored at index, starting with w.
    */
   T operator[](int idx) {
@@ -196,7 +197,7 @@ public:
 
   /**
    * Multiply two different Quaternions.
-   * @argument other: The second quaternion.
+   * @param other: The second quaternion.
    * @return: This, updated by the multiplication.
    */
   Quaternion<T> &operator*=(Quaternion<T> other) {
@@ -213,7 +214,7 @@ public:
 
   /**
    * Multiply two different Quaternions.
-   * @argument other: The second quaternion.
+   * @param other: The second quaternion.
    * @return: A new quaternion holding the result of the multiplication.
    */
   Quaternion<T> operator*(Quaternion<T> other) {
@@ -224,10 +225,10 @@ public:
     return Quaternion<T>(w, x, y, z);
   }
 
-	/**
-	 * Invert the Quaternion, creating a Quaternion with the exact inverse rotation.
-	 * @return: A new quaternion holding the roation in the other direction.
-	 */
+  /**
+   * Invert the Quaternion, creating a Quaternion with the exact inverse rotation.
+   * @return: A new quaternion holding the roation in the other direction.
+   */
   Quaternion<T> invert( void ) {
     return Quaternion<T>( this->w_, this->x_ * -1, this->y_ * -1, this->z_ * -1);
   }
@@ -245,7 +246,7 @@ public:
    * theta = 2 * arccos(|<q1, q2>|)
    * Huynh, D.Q., J Math Imaging Vis, 2009, 35, 155. https://doi.org/10.1007/s10851-009-0161-2
    * Huggins, D.J., J Comput Chem, 2014, 35, 377– 385. https://doi.org/10.1002/jcc.23504
-   * @argument other: The other quaternion.
+   * @param other: The other quaternion.
    * @return: The difference in the rotation described by the
    *          quaternions, as an angle.
    */
@@ -259,7 +260,7 @@ public:
   
   /**
    * Rotates a given vector by the Quaternion.
-   * @argument vector: The vector to be rotated.
+   * @param vector: The vector to be rotated.
    * @return: The transformed vector.
    */
   Vec3 rotate(Vec3 vector) {

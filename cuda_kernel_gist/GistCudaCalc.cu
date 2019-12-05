@@ -7,9 +7,9 @@
 
  /**
   * Calculate the squared distance in an orthorhombic box. See cpptraj implementation.
-  * @argument vec1: The first point of the distance calculation.
-  * @argument vec2: The seconf point of the distance calculation
-  * @argument box: The boxinfo of the object.
+  * @param vec1: The first point of the distance calculation.
+  * @param vec2: The seconf point of the distance calculation
+  * @param box: The boxinfo of the object.
   * @return: The minimal distance in an orthorhombic box.
   */
 __device__ 
@@ -59,9 +59,9 @@ float dist2_imageOrtho(float *vec1, float *vec2, BoxInfo box) {
 
 /**
  * Calculate M * v.
- * @argument vec: The vector v.
- * @argument mat3x3: The matrix M.
- * @argument ret: The values to be returned. If null, returns into vec.
+ * @param vec: The vector v.
+ * @param mat3x3: The matrix M.
+ * @param ret: The values to be returned. If null, returns into vec.
  */
 __device__
 void scalarProd(float* vec, BoxInfo mat3x3, float *ret) {
@@ -81,10 +81,10 @@ void scalarProd(float* vec, BoxInfo mat3x3, float *ret) {
 
 /**
  * Find the result_O squared distance in a non-orthogonal box.
- * @argument vec1: Position vector of point 1.
- * @argument vec2: Position vector of point 2.
- * @argument recip: The inverse of the ucell.
- * @argument ucell: The box matrix.
+ * @param vec1: Position vector of point 1.
+ * @param vec2: Position vector of point 2.
+ * @param recip: The inverse of the ucell.
+ * @param ucell: The box matrix.
  * @return: The minimal squared distance between two atoms, also considering the images.
  */
 __device__
@@ -100,13 +100,13 @@ float dist2_imageNonOrtho(float *vec1, float *vec2, BoxInfo recip, UnitCell ucel
 
 /**
  * Calculate if the distance to an image is smaller than a given distance.
- * @argument f: The first vector in the reciprocal space.
- * @argument vec2Cartesian: The second vector in cartesian coordinates.
- * @argument nx: Which neighbour in x direction?
- * @argument ny: Which neighbour in y direction?
- * @argument nz: Which neighbour in z direction?
- * @argument ucell: The box matrix.
- * @argument finalMin: The already calculated minimum.
+ * @param f: The first vector in the reciprocal space.
+ * @param vec2Cartesian: The second vector in cartesian coordinates.
+ * @param nx: Which neighbour in x direction?
+ * @param ny: Which neighbour in y direction?
+ * @param nz: Which neighbour in z direction?
+ * @param ucell: The box matrix.
+ * @param finalMin: The already calculated minimum.
  * @return: The new minimum, if it is smaller than finalMin, finalMin otherwise.
  */
 __device__
@@ -131,9 +131,9 @@ float calcIfDistIsSmaller(float *f, float *vec2Cartesian, int nx, int ny, int nz
 /**
  * Calculate the distance in a non-orthorhombic box, if the vectors are already
  * multiplied by the inverse box matrix.
- * @argument vec1: The first position vector.
- * @argument vec2: The second position vector.
- * @argument ucell: The box cell.
+ * @param vec1: The first position vector.
+ * @param vec2: The second position vector.
+ * @param ucell: The box cell.
  * @return: The minimal distance between images.
  */
 __device__
@@ -192,8 +192,8 @@ float dist2_imageNonOrthoRecipTest(float * vec1, float * vec2, UnitCell ucell) {
 
 /**
  * Calculates the distance between two vectors, without imaging.
- * @argument vec1: The position vector of the first atom.
- * @argument vec2: The position vector of the second atom.
+ * @param vec1: The position vector of the first atom.
+ * @param vec2: The position vector of the second atom.
  * @return: The squared distance between the two positions.
  */
 __device__
@@ -207,16 +207,16 @@ float dist2_noImage(float *vec1, float *vec2) {
 
 /**
  * Caclulate the total energy between two atoms.
- * @argument vec1: The position vector of atom 1.
- * @argument vec2: The position vector of atom 2.
- * @argument q1: The charge of atom 1.
- * @argument q2: The charge of atom 2.
- * @argument LJA: The lennard jones A parameter.
- * @argument LJB: The lennard jones B parameter.
- * @argument boxinfo: Which kind of box, 0 not periodic, 1 orthorhombic, 2 otherwise.
- * @argument recip_o_box: Holds either the inverse of the cell matrix, if boxinfo is 2,
+ * @param vec1: The position vector of atom 1.
+ * @param vec2: The position vector of atom 2.
+ * @param q1: The charge of atom 1.
+ * @param q2: The charge of atom 2.
+ * @param LJA: The lennard jones A parameter.
+ * @param LJB: The lennard jones B parameter.
+ * @param boxinfo: Which kind of box, 0 not periodic, 1 orthorhombic, 2 otherwise.
+ * @param recip_o_box: Holds either the inverse of the cell matrix, if boxinfo is 2,
  *                        or the box dimensions, if boxinfo is 1, or is NULL, if boxinfo is 0.
- * @argument ucell: Holds the cell matrix, if boxinfo is 2, NULL otherwise.
+ * @param ucell: Holds the cell matrix, if boxinfo is 2, NULL otherwise.
  * @return: The total interaction energy between the two atoms.
  */
 __device__
@@ -232,10 +232,10 @@ float calcTotalEnergy(float q1, float q2,
 
 /**
  * Calculate the distance between two different points.
- * @parameter vec1: The first vector to calculate the distance.
- * @parameter vec2: The second vector to calculate the distance.
- * @parameter recip_o_box: The boxinfo, either the box or the reciprocal.
- * @parameter ucell: The unitcell of a box.
+ * @param vec1: The first vector to calculate the distance.
+ * @param vec2: The second vector to calculate the distance.
+ * @param recip_o_box: The boxinfo, either the box or the reciprocal.
+ * @param ucell: The unitcell of a box.
  * @return: The squared distance between two points.
  */
 __device__
@@ -261,9 +261,9 @@ float calcDist(float *vec1, float *vec2, BoxInfo recip_o_box,
 
 /**
  * Calculate the Van der Waals energy between two atoms.
- * @argument r_2: The squared distance between the two atoms.
- * @argument LJA: The A part of the lennard jones potential.
- * @argument LJB: The B part if the Lennard Jones potential.
+ * @param r_2: The squared distance between the two atoms.
+ * @param LJA: The A part of the lennard jones potential.
+ * @param LJB: The B part if the Lennard Jones potential.
  * @return: The Van der Waals energy.
  */
 __device__
@@ -279,9 +279,9 @@ float calcVdWEnergy(float r_2, float LJA, float LJB) {
 
 /**
  * Calculate the electrostatic energy between two different atoms.
- * @argument r_2: The square distance between the two atoms.
- * @argument q1: The charge of atom 1.
- * @argument q2: The charge of atom 2.
+ * @param r_2: The square distance between the two atoms.
+ * @param q1: The charge of atom 1.
+ * @param q2: The charge of atom 2.
  * @return: The electrostatic energy between the two atoms.
  */
 __device__
@@ -294,10 +294,10 @@ float calcElectrostaticEnergy(float r_2, float q1, float q2) {
 
 /**
  * Get the index into the lennard jones parameter array.
- * @argument a1: The atom type index of atom 1.
- * @argument a2: The atom type index of atom 2.
- * @argument NBindex: The arrays holding the indices into the LJ array.
- * @argument ntypes: The number of atom types.
+ * @param a1: The atom type index of atom 1.
+ * @param a2: The atom type index of atom 2.
+ * @param NBindex: The arrays holding the indices into the LJ array.
+ * @param ntypes: The number of atom types.
  * @return: The index into the parameter arrays.
  */
 __device__
@@ -307,11 +307,11 @@ int getLJIndex(int a1, int a2, int *NBindex, int ntypes) {
 
 /**
  * Get the LJ parameters from a parameter array.
- * @argument a1: The atom type index of atom 1.
- * @argument a2: The atom type index of atom 2.
- * @argument NBindex: The indices into the parameter array.
- * @argument ntypes: The number of atom types.
- * @argument paramsLJ: The parameter array.
+ * @param a1: The atom type index of atom 1.
+ * @param a2: The atom type index of atom 2.
+ * @param NBindex: The indices into the parameter array.
+ * @param ntypes: The number of atom types.
+ * @param paramsLJ: The parameter array.
  * @return: The LJ parameter belonging to the atom type pair a1, a2.
  */
 __device__
@@ -325,9 +325,9 @@ ParamsLJ getLJParam(int a1, int a2, int *NBindex, int ntypes, ParamsLJ *paramsLJ
 
 /**
  * Checks if atom is on grid.
- * @argument vec: Position vector to the atom.
- * @argument min: The grid starting position.
- * @argument max: The end of the grid.
+ * @param vec: Position vector to the atom.
+ * @param min: The grid starting position.
+ * @param max: The end of the grid.
  * @return: True if vector is on grid.
  */
 __device__
@@ -339,27 +339,27 @@ bool isOnGrid(float *vec, float *min, float *max) {
 
 /**
  * Calculate the energy on the GPU.
- * @argument coords: An array holding all the coordinates of all atoms.
- * @argument NBindex: An array holding indices into the LJ parameter arrays.
- * @argument ntypes: The number of atom types.
- * @argument paramsLJA: The A LJ parameters.
- * @argument paramsLJB: The B LJ parameters.
- * @argument charges: The charges of the atoms.
- * @argument boxinfo: Which kind of box, 0 not periodic, 1 orthorhombic, 2 otherwise.
- * @argument recip_o_box: Holds either the inverse of the cell matrix, if boxinfo is 2,
+ * @param coords: An array holding all the coordinates of all atoms.
+ * @param NBindex: An array holding indices into the LJ parameter arrays.
+ * @param ntypes: The number of atom types.
+ * @param paramsLJA: The A LJ parameters.
+ * @param paramsLJB: The B LJ parameters.
+ * @param charges: The charges of the atoms.
+ * @param boxinfo: Which kind of box, 0 not periodic, 1 orthorhombic, 2 otherwise.
+ * @param recip_o_box: Holds either the inverse of the cell matrix, if boxinfo is 2,
  *                        or the box dimensions, if boxinfo is 1, or is NULL, if boxinfo is 0.
- * @argument ucell: Holds the cell matrix, if boxinfo is 2, NULL otherwise.
- * @argument maxAtoms: The number of atoms in the system.
- * @argument a_types: The different atom types of the atoms.
- * @argument solvent: True if atom is a solvent atom, false otherwise.
- * @argument molecule: The number of the molecule this atom belong to.
- * @argument result_ww: The result of the water - water interactions.
- * @argument result_sw: The result of the solute - water interactions.
- * @argument min: The minimum values of the grid.
- * @argument max: The maximum values of the grid.
+ * @param ucell: Holds the cell matrix, if boxinfo is 2, NULL otherwise.
+ * @param maxAtoms: The number of atoms in the system.
+ * @param a_types: The different atom types of the atoms.
+ * @param solvent: True if atom is a solvent atom, false otherwise.
+ * @param molecule: The number of the molecule this atom belong to.
+ * @param result_ww: The result of the water - water interactions.
+ * @param result_sw: The result of the solute - water interactions.
+ * @param min: The minimum values of the grid.
+ * @param max: The maximum values of the grid.
  */
 __global__
-void cudaCalcEnergy(Test *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
+void cudaCalcEnergy(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
                           BoxInfo recip_o_box, UnitCell ucell, int maxAtoms, float *result_ww, float *result_sw, 
                           float *min, float *max, int headAtomType, float neighbourCut2, int *result_O, int *result_N) {
   
@@ -376,8 +376,8 @@ void cudaCalcEnergy(Test *coords, int *NBindex, int ntypes, ParamsLJ *parameterL
   // Do not calculate if the two values are the same or they belong to the same molecule.
   if ( (atom1.molecule != atom2.molecule)) {
 
-    Test t1 = coords[a1];
-    Test t2 = coords[a2];
+    Coordinates_GPU t1 = coords[a1];
+    Coordinates_GPU t2 = coords[a2];
     ParamsLJ lj = getLJParam(atom1.atomType, atom2.atomType, NBindex, ntypes, parameterLJ);
 
     float vec1[3] = {t1.x, t1.y, t1.z};
@@ -397,27 +397,27 @@ void cudaCalcEnergy(Test *coords, int *NBindex, int ntypes, ParamsLJ *parameterL
 /**
  * Calculate the energy on the GPU. This implementation is somewhat slower,
  * but is able to calculate the order parameters as well as the rest.
- * @argument coords: An array holding all the coordinates of all atoms.
- * @argument NBindex: An array holding indices into the LJ parameter arrays.
- * @argument ntypes: The number of atom types.
- * @argument paramsLJA: The A LJ parameters.
- * @argument paramsLJB: The B LJ parameters.
- * @argument charges: The charges of the atoms.
- * @argument boxinfo: Which kind of box, 0 not periodic, 1 orthorhombic, 2 otherwise.
- * @argument recip_o_box: Holds either the inverse of the cell matrix, if boxinfo is 2,
+ * @param coords: An array holding all the coordinates of all atoms.
+ * @param NBindex: An array holding indices into the LJ parameter arrays.
+ * @param ntypes: The number of atom types.
+ * @param paramsLJA: The A LJ parameters.
+ * @param paramsLJB: The B LJ parameters.
+ * @param charges: The charges of the atoms.
+ * @param boxinfo: Which kind of box, 0 not periodic, 1 orthorhombic, 2 otherwise.
+ * @param recip_o_box: Holds either the inverse of the cell matrix, if boxinfo is 2,
  *                        or the box dimensions, if boxinfo is 1, or is NULL, if boxinfo is 0.
- * @argument ucell: Holds the cell matrix, if boxinfo is 2, NULL otherwise.
- * @argument maxAtoms: The number of atoms in the system.
- * @argument a_types: The different atom types of the atoms.
- * @argument solvent: True if atom is a solvent atom, false otherwise.
- * @argument molecule: The number of the molecule this atom belong to.
- * @argument result_ww: The result of the water - water interactions.
- * @argument result_sw: The result of the solute - water interactions.
- * @argument min: The minimum values of the grid.
- * @argument max: The maximum values of the grid.
+ * @param ucell: Holds the cell matrix, if boxinfo is 2, NULL otherwise.
+ * @param maxAtoms: The number of atoms in the system.
+ * @param a_types: The different atom types of the atoms.
+ * @param solvent: True if atom is a solvent atom, false otherwise.
+ * @param molecule: The number of the molecule this atom belong to.
+ * @param result_ww: The result of the water - water interactions.
+ * @param result_sw: The result of the solute - water interactions.
+ * @param min: The minimum values of the grid.
+ * @param max: The maximum values of the grid.
  */
 __global__
-void cudaCalcEnergySlow(Test *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
+void cudaCalcEnergySlow(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
   BoxInfo recip_o_box, UnitCell ucell, int maxAtoms, float *result_ww, float *result_sw,
   float *min, float *max, int headAtomType, float neighbourCut2, int *result_O, int *result_N) {
   
@@ -438,8 +438,8 @@ void cudaCalcEnergySlow(Test *coords, int *NBindex, int ntypes, ParamsLJ *parame
      AtomProperties atom2 = atomProps[a2];
     // Do not calculate if the two values are the same or they belong to the same molecule.
     if ( (a1 != a2) && (atom1.molecule != atom2.molecule)) {
-      Test t1 = coords[a1];
-      Test t2 = coords[a2];
+      Coordinates_GPU t1 = coords[a1];
+      Coordinates_GPU t2 = coords[a2];
       ParamsLJ lj = getLJParam(atom1.atomType, atom2.atomType, NBindex, ntypes, parameterLJ);
       float vec1[3] = {t1.x, t1.y, t1.z};
       float vec2[3] = {t2.x, t2.y, t2.z};
@@ -486,10 +486,10 @@ void cudaCalcEnergySlow(Test *coords, int *NBindex, int ntypes, ParamsLJ *parame
 
 /**
  * Entropy calculation.
- * @parameter entCalc: Uses an object of type EntropyCalculator (less access to memory).
- * @parameter returnSTrans: The return array for dTStrans.
- * @parameter returnSOrient: The return array for dTSorient.
- * @parameter returnSSix: The return array for dTSsix.
+ * @param entCalc: Uses an object of type EntropyCalculator (less access to memory).
+ * @param returnSTrans: The return array for dTStrans.
+ * @param returnSOrient: The return array for dTSorient.
+ * @param returnSSix: The return array for dTSsix.
  */
 __global__
 void calculateEntropy(EntropyCalculator entCalc, float *returnSTrans, float *returnSOrient, float *returnSSix) {
