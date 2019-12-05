@@ -190,9 +190,9 @@ public:
   // In: Action_GIGIST.cpp
   // line: 35
   void Help() const;
-	// Destructor
-	// In Action_GIGIST.cpp
-	// line: 61
+  // Destructor
+  // In Action_GIGIST.cpp
+  // line: 61
   ~Action_GIGist();
 private:
   // Inherited Functions
@@ -258,13 +258,15 @@ private:
   // line: 1105
   void writeDxFile(std::string, std::vector<double>);
 
-	Vec3 calcCenterOfMass(int atom_begin, int atom_end, const double *coordinates);
+  Vec3 calcCenterOfMass(int atom_begin, int atom_end, const double *coordinates);
 
-	int bin(int begin, int end, Vec3 vec, ActionFrame frame);
+  int bin(int begin, int end, Vec3 vec, ActionFrame frame);
 
-	void calcDipole(int begin, int end, int voxel, ActionFrame frame);
+  void calcDipole(int begin, int end, int voxel, ActionFrame frame);
 
-	Quaternion<DOUBLE_O_FLOAT> calcQuaternion(std::vector<Vec3> molAtomCoords, Vec3 center, int headAtomIndex);
+  Quaternion<DOUBLE_O_FLOAT> calcQuaternion(std::vector<Vec3> molAtomCoords, Vec3 center, int headAtomIndex);
+
+  bool almostEqual(double input, double control);
 
 
   // Functions defined for FEBISS implementation
@@ -350,11 +352,11 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 1087
-  void freeGPUMemory(void);
+  void freeGPUMemory();
 
   // In: Action_GIGIST.cpp
   // line: 1112
-  void copyToGPU(void);
+  void copyToGPU();
 
 #endif
 
@@ -394,7 +396,7 @@ private:
   std::vector<DOUBLE_O_FLOAT> charges_;
   std::vector<int> molecule_;
   std::vector<int> atomTypes_;
-	std::vector<double> masses_;
+  std::vector<double> masses_;
 
   // Is a usual array, as std::vector<bool> is actually not a vector storing boolean
   // values but a bit string with the boolean values encoded at each position.
@@ -416,7 +418,7 @@ private:
   std::vector<int> solventAtomCounter_;
   bool writeDx_;
   bool doorder_;
-	bool use_com_;
+  bool use_com_;
 
   Timer tRot_;
   Timer tEadd_;

@@ -75,6 +75,10 @@ void Action_GIGist::Help() const {
 
 Action_GIGist::~Action_GIGist() {
   delete[] this->solvent_;
+  // The GPU memory should already be freed, but just in case...
+  #ifdef CUDA
+  this->freeGPUMemory();
+  #endif
 }
 
 /**
@@ -106,9 +110,9 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
 
   if (argList.Contains("griddim")) {
     ArgList dimArgs = argList.GetNstringKey("griddim", 3);
-    double x = dimArgs.getNextInteger(-1);
-    double y = dimArgs.getNextInteger(-1);
-    double z = dimArgs.getNextInteger(-1);
+    double x = dimArgs.getNextInteger(-1.0);
+    double y = dimArgs.getNextInteger(-1.0);
+    double z = dimArgs.getNextInteger(-1.0);
     if ( (x < 0) || (y < 0) || (z < 0) ) {
       mprinterr("Error: Negative Values for griddimensions not allowed.\n\n");
       return Action::ERR;
@@ -147,12 +151,9 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
     this->use_com_ = true;
   }
 
-  if (argList.Contains("out")) {
-		ArgList outArgs = argList.GetNstringKey("out", 1);
-    this->datafile_ = actionInit.DFL().AddCpptrajFile( outArgs.GetStringNext(), "GIST output" );
-  } else {
-    this->datafile_ = actionInit.DFL().AddCpptrajFile( "out.dat", "GIST output" );
-  }
+
+  std::string outfilename{argList.GetStringKey("out", "out.dat")};
+  this->datafile_ = actionInit.DFL().AddCpptrajFile( outfilename, "GIST output" );
 
   this->gridStart_.SetVec(this->center_[0] - (this->dimensions_[0] * 0.5) * this->voxelSize_, 
                           this->center_[1] - (this->dimensions_[1] * 0.5) * this->voxelSize_,
@@ -169,7 +170,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
   if (placeWaterMolecules_)
     this->hVectors_.resize(this->nVoxels_);
 
-  std::string dsname = actionInit.DSL().GenerateDefaultName("GIST");
+  std::string dsname{ actionInit.DSL().GenerateDefaultName("GIST") };
   this->result_ = std::vector<DataSet_3D *>(this->dict_.size());
   for (unsigned int i = 0; i < this->dict_.size(); ++i) {
     this->result_.at(i) = (DataSet_3D*)actionInit.DSL().AddSet(DataSet::GRID_FLT, MetaData(dsname, this->dict_.getElement(i)));
@@ -203,7 +204,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
           "#      J. Chem. Phys. 137, 044101 (2012)\n"
           "#    Lazaridis, J. Phys. Chem. B 102, 3531–3541 (1998)\n",
           this->center_[0], this->center_[1], this->center_[2],
-          (int)this->dimensions_[0], (int)this->dimensions_[1], (int)this->dimensions_[2]);
+          static_cast<int>( this->dimensions_[0] ), static_cast<int>( this->dimensions_[1] ), static_cast<int>( this->dimensions_[2]) );
   
   return Action::OK;
 }
@@ -222,15 +223,15 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
   this->top_             = setup.TopAddress();
   this->numberAtoms_     = setup.Top().Natom();
   this->numberSolvent_   = setup.Top().Nsolvent();
-  this->solvent_ = new bool[this->numberAtoms_];
-  bool firstRound = true;
+  this->solvent_         = new bool[this->numberAtoms_];
+  bool firstRound        { true };
 
   // Save different values, which depend on the molecules and/or atoms.
   for (Topology::mol_iterator mol = setup.Top().MolStart(); 
           mol != setup.Top().MolEnd(); ++mol) {
-    unsigned int nAtoms = (unsigned int) mol->NumAtoms();
+    int nAtoms{ static_cast<int>(mol->NumAtoms()) };
 
-    for (unsigned int i = 0; i < nAtoms; ++i) {
+    for (int i = 0; i < nAtoms; ++i) {
       this->molecule_.push_back( setup.Top()[mol->BeginAtom() + i].MolNum() );
       this->charges_.push_back( setup.Top()[mol->BeginAtom() + i].Charge() );
       this->atomTypes_.push_back( setup.Top()[mol->BeginAtom() + i].TypeIndex() );
@@ -238,7 +239,7 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
 
       // Check if the molecule is a solvent, either by the topology parameters or because force was set.
       if ( (mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( setup.Top()[mol->BeginAtom()].MolNum() >= this->forceStart_ )) ) {
-        std::string aName = setup.Top()[mol->BeginAtom() + i].ElementName();
+        std::string aName{ setup.Top()[mol->BeginAtom() + i].ElementName() };
         
         // Check if dictionary already holds an entry for the atoms name, if not add it to
         // the dictionary, if yes, add 1 to the correct solvent atom counter.
@@ -273,7 +274,7 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
   
   // Define different things for the case that this was compiled using CUDA
 #ifdef CUDA
-  NonbondParmType nb = setup.Top().Nonbond();
+  NonbondParmType nb{ setup.Top().Nonbond() };
   this->NBIndex_ = nb.NBindex();
   this->numberAtomTypes_ = nb.Ntypes();
   for (unsigned int i = 0; i < nb.NBarray().size(); ++i) {
@@ -312,18 +313,11 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
  * @return: Action::ERR on error, Action::OK if everything ran smoothly.
  */
 Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
-/*  if (this->nFrames_ < 1 && this->use_com_) {
-    for (Topology::mol_iterator mol_iter = this->top_->MolStart(); mol_iter != this->top_->MolEnd(); ++mol_iter) {
-      if (mol_iter->IsSolvent()) {
-        Vec3 com = this->calcCenterOfMass(mol_iter->BeginAtom(), mol_iter->EndAtom(), frame);
-        break;
-      }
-    }
-  }*/
+
   this->nFrames_++;
   std::vector<DOUBLE_O_FLOAT> eww_result(this->numberAtoms_);
   std::vector<DOUBLE_O_FLOAT> esw_result(this->numberAtoms_);
-  std::vector<std::vector<int> > order_indices;
+  std::vector<std::vector<int> > order_indices{};
 
   if (placeWaterMolecules_ && this->nFrames_ == 1)
     this->writeOutSolute(frame);
@@ -332,10 +326,10 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
   #ifdef CUDA
   this->tEnergy_.Start();
 
-  Matrix_3x3 ucell_m, recip_m;
+  Matrix_3x3 ucell_m{}, recip_m{};
   float *recip = NULL;
   float *ucell = NULL;
-  int boxinfo;
+  int boxinfo{};
 
   // Check Boxinfo and write the necessary data into recip, ucell and boxinfo.
   switch(this->image_.ImageType()) {
@@ -344,15 +338,15 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       ucell = new float[9];
       frame.Frm().BoxCrd().ToRecip(ucell_m, recip_m);
       for (int i = 0; i < 9; ++i) {
-        ucell[i] = (float) ucell_m.Dptr()[i];
-        recip[i] = (float) recip_m.Dptr()[i];
+        ucell[i] = static_cast<float>( ucell_m.Dptr()[i] );
+        recip[i] = static_cast<float>( recip_m.Dptr()[i] );
       }
       boxinfo = 2;
       break;
     case ORTHO:
       recip = new float[9];
       for (int i = 0; i < 3; ++i) {
-        recip[i] = (float) frame.Frm().BoxCrd()[i];
+        recip[i] = static_cast<float>( frame.Frm().BoxCrd()[i] );
       }
       ucell = NULL;
       boxinfo = 1;
@@ -367,23 +361,23 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       return Action::ERR;
   }
 
-  std::vector<int> result_o = std::vector<int>(4 * this->numberAtoms_);
-  std::vector<int> result_n = std::vector<int>(this->numberAtoms_);
+  std::vector<int> result_o{ std::vector<int>(4 * this->numberAtoms_) };
+  std::vector<int> result_n{ std::vector<int>(this->numberAtoms_) };
   // TODO: Switch things around a bit and move the back copying to the end of the calculation.
   //       Then the time needed to go over all waters and the calculations that come with that can
   //			 be hidden quite nicely behind the interaction energy calculation.
   // Must create arrays from the vectors, does that by getting the address of the first element of the vector.
-  std::vector<std::vector<float> > e_result = doActionCudaEnergy(frame.Frm().xAddress(), this->NBindex_c_, this->numberAtomTypes_, this->paramsLJ_c_, this->molecule_c_, boxinfo, recip, ucell, this->numberAtoms_, this->min_c_, 
+  std::vector<std::vector<float> > e_result{ doActionCudaEnergy(frame.Frm().xAddress(), this->NBindex_c_, this->numberAtomTypes_, this->paramsLJ_c_, this->molecule_c_, boxinfo, recip, ucell, this->numberAtoms_, this->min_c_, 
                                                     this->max_c_, this->headAtomType_,this->neighbourCut2_, &(result_o[0]), &(result_n[0]), this->result_w_c_, 
-                                                    this->result_s_c_, this->result_O_c_, this->result_N_c_, this->doorder_);
+                                                    this->result_s_c_, this->result_O_c_, this->result_N_c_, this->doorder_) };
   eww_result = e_result.at(0);
   esw_result = e_result.at(1);
 
   if (this->doorder_) {
-    int counter = 0;
+    int counter{ 0 };
     for (unsigned int i = 0; i < (4 * this->numberAtoms_); i += 4) {
       ++counter;
-      std::vector<int> temp;
+      std::vector<int> temp{};
       for (unsigned int j = 0; j < 4; ++j) {
         temp.push_back(result_o.at(i + j));
       }
@@ -412,11 +406,11 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
     if ((mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( this->top_->operator[](mol->BeginAtom()).MolNum() >= this->forceStart_ ))) {
       
     
-      int headAtomIndex = -1;
+      int headAtomIndex{ -1 };
       // Keep voxel at -1 if it is not possible to put it on the grid
-      int voxel = -1;
-      std::vector<Vec3> molAtomCoords;
-      Vec3 com{0, 0, 0};
+      int voxel{ -1 };
+      std::vector<Vec3> molAtomCoords{};
+      Vec3 com{ 0, 0, 0 };
 
       // If center of mass should be used, use this part.
       if (this->use_com_) {
@@ -448,16 +442,16 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           } else {
             size_t bin_i{}, bin_j{}, bin_k{};
             if ( this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k) ) {
-              std::string aName = this->top_->operator[](atom1).ElementName();
-              int voxTemp = this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k);
-							#ifdef _OPENMP
-							#pragma omp critical
-							{
-							#endif
+              std::string aName{ this->top_->operator[](atom1).ElementName() };
+              long voxTemp{ this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k) };
+              #ifdef _OPENMP
+              #pragma omp critical
+              {
+              #endif
               this->resultV_.at(this->dict_.getIndex(aName) - this->result_.size()).at(voxTemp) += 1.0;
-							#ifdef _OPENMP
-							}
-							#endif
+              #ifdef _OPENMP
+              }
+              #endif
             }
           }
         }
@@ -539,9 +533,9 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         * use it for any other solvent.
         */
         if (this->doorder_) {
-          double sum = 0;
-          Vec3 cent( frame.Frm().xAddress() + (mol->BeginAtom() + headAtomIndex) * 3 );
-          std::vector<Vec3> vectors;
+          double sum{ 0 };
+          Vec3 cent{ frame.Frm().xAddress() + (mol->BeginAtom() + headAtomIndex) * 3 };
+          std::vector<Vec3> vectors{};
           switch(this->image_.ImageType()) {
             case NONORTHO:
             case ORTHO:
@@ -567,7 +561,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           
           for (int i = 0; i < 3; ++i) {
             for (int j = i + 1; j < 4; ++j) {
-              double cosThet = (vectors.at(i) * vectors.at(j)) / sqrt(vectors.at(i).Magnitude2() * vectors.at(j).Magnitude2());
+              double cosThet{ (vectors.at(i) * vectors.at(j)) / sqrt(vectors.at(i).Magnitude2() * vectors.at(j).Magnitude2()) };
               sum += (cosThet + 1.0/3) * (cosThet + 1.0/3);
             }
           }
@@ -580,7 +574,14 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           }
           #endif
         }
+        #ifdef _OPENMP
+        #pragma omp critical
+        {
+        #endif
         this->result_.at(this->dict_.getIndex("neighbour"))->UpdateVoxel(voxel, result_n.at(mol->BeginAtom() + headAtomIndex));
+        #ifdef _OPENMP
+        }
+        #endif
         // End of calculation of the order parameters
 
         #ifndef _OPENMP
@@ -610,11 +611,11 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       if (voxel != -1 ) {
         std::vector<Vec3> nearestWaters(4);
         // Use HUGE distances at the beginning. This is defined as 3.40282347e+38F.
-        double distances[4] = {HUGE, HUGE, HUGE, HUGE};
+        double distances[4]{HUGE, HUGE, HUGE, HUGE};
         // Needs to be fixed, one does not need to calculate all interactions each time.
         for (int atom1 = mol->BeginAtom(); atom1 < mol->EndAtom(); ++atom1) {
-          double eww = 0;
-          double esw = 0;
+          double eww{ 0 };
+          double esw{ 0 };
   // OPENMP only over the inner loop
 
   #if defined _OPENMP
@@ -623,8 +624,8 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           for (unsigned int atom2 = 0; atom2 < this->numberAtoms_; ++atom2) {
             if ( (*this->top_)[atom1].MolNum() != (*this->top_)[atom2].MolNum() ) {
               this->tEadd_.Start();
-              double r_2 = this->calcDistanceSqrd(frame, atom1, atom2);
-              double energy = this->calcEnergy(r_2, atom1, atom2);
+              double r_2{ this->calcDistanceSqrd(frame, atom1, atom2) };
+              double energy{ this->calcEnergy(r_2, atom1, atom2) };
               this->tEadd_.Stop();
               if (this->solvent_[atom2]) {
   #ifdef _OPENMP
@@ -677,11 +678,11 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
               }
             }
           }
-          double sum = 0;
+          double sum{ 0 };
           for (int i = 0; i < 3; ++i) {
             for (int j = i + 1; j < 4; ++j) {
-              double cosThet = (nearestWaters.at(i) * nearestWaters.at(j)) / 
-                                sqrt(nearestWaters.at(i).Magnitude2() * nearestWaters.at(j).Magnitude2());
+              double cosThet{ (nearestWaters.at(i) * nearestWaters.at(j)) / 
+                                sqrt(nearestWaters.at(i).Magnitude2() * nearestWaters.at(j).Magnitude2()) };
               sum += (cosThet + 1.0/3) * (cosThet + 1.0/3);
             }
           }
@@ -725,7 +726,7 @@ void Action_GIGist::Print() {
   mprintf("Processed %d frames.\nMoving on to entropy calculation.\n", this->nFrames_);
   ProgressBar progBarEntropy(this->nVoxels_);
 #ifdef _OPENMP
-  int curVox = 0;
+  int curVox{ 0 };
   #pragma omp parallel for
 #endif
   for (unsigned int voxel = 0; voxel < this->nVoxels_; ++voxel) {
@@ -737,19 +738,19 @@ void Action_GIGist::Print() {
     #pragma omp critical
     progBarEntropy.Update( curVox++ );
 #endif
-    double dTSorient_norm   = 0;
-    double dTStrans_norm    = 0;
-    double dTSsix_norm      = 0;
-    double dTSorient_dens   = 0;
-    double dTStrans_dens    = 0;
-    double dTSsix_dens      = 0;
-    double Esw_norm         = 0;
-    double Esw_dens         = 0;
-    double Eww_norm         = 0;
-    double Eww_dens         = 0;
-    double order_norm       = 0;
-    double neighbour_dens   = 0;
-    double neighbour_norm   = 0;
+    double dTSorient_norm   { 0.0 };
+    double dTStrans_norm    { 0.0 };
+    double dTSsix_norm      { 0.0 };
+    double dTSorient_dens   { 0.0 };
+    double dTStrans_dens    { 0.0 };
+    double dTSsix_dens      { 0.0 };
+    double Esw_norm         { 0.0 };
+    double Esw_dens         { 0.0 };
+    double Eww_norm         { 0.0 };
+    double Eww_dens         { 0.0 };
+    double order_norm       { 0.0 };
+    double neighbour_dens   { 0.0 };
+    double neighbour_norm   { 0.0 };
     // Only calculate if there is actually water molecules at that position.
     if (this->result_.at(this->dict_.getIndex("population"))->operator[](voxel) > 0) {
       double pop = this->result_.at(this->dict_.getIndex("population"))->operator[](voxel);
@@ -783,10 +784,10 @@ void Action_GIGist::Print() {
     
     // Calculate the final dipole values. The temporary data grid has to be used, as data
     // already saved cannot be updated.
-    double DPX = this->result_.at(this->dict_.getIndex("dipole_xtemp"))->operator[](voxel) / (DEBYE * this->nFrames_ * this->voxelVolume_);
-    double DPY = this->result_.at(this->dict_.getIndex("dipole_ytemp"))->operator[](voxel) / (DEBYE * this->nFrames_ * this->voxelVolume_);
-    double DPZ = this->result_.at(this->dict_.getIndex("dipole_ztemp"))->operator[](voxel) / (DEBYE * this->nFrames_ * this->voxelVolume_);
-    double DPG = sqrt( DPX * DPX + DPY * DPY + DPZ * DPZ );
+    double DPX{ this->result_.at(this->dict_.getIndex("dipole_xtemp"))->operator[](voxel) / (DEBYE * this->nFrames_ * this->voxelVolume_) };
+    double DPY{ this->result_.at(this->dict_.getIndex("dipole_ytemp"))->operator[](voxel) / (DEBYE * this->nFrames_ * this->voxelVolume_) };
+    double DPZ{ this->result_.at(this->dict_.getIndex("dipole_ztemp"))->operator[](voxel) / (DEBYE * this->nFrames_ * this->voxelVolume_) };
+    double DPG{ sqrt( DPX * DPX + DPY * DPY + DPZ * DPZ ) };
     this->result_.at(this->dict_.getIndex("dTStrans_norm"))->UpdateVoxel(voxel, dTStrans_norm);
     this->result_.at(this->dict_.getIndex("dTStrans_dens"))->UpdateVoxel(voxel, dTStrans_dens);
     this->result_.at(this->dict_.getIndex("dTSorient_norm"))->UpdateVoxel(voxel, dTSorient_norm);
@@ -838,9 +839,9 @@ void Action_GIGist::Print() {
   ProgressBar progBarIO(this->nVoxels_);
   for (unsigned int voxel = 0; voxel < this->nVoxels_; ++voxel) {
     progBarIO.Update( voxel );
-    size_t i, j, k;
+    size_t i{}, j{}, k{};
     this->result_.at(this->dict_.getIndex("population"))->ReverseIndex(voxel, i, j, k);
-    Vec3 coords = this->result_.at(this->dict_.getIndex("population"))->Bin().Center(i, j, k);
+    Vec3 coords{ this->result_.at(this->dict_.getIndex("population"))->Bin().Center(i, j, k) };
     this->datafile_->Printf("%d %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g", 
                             voxel, coords[0], coords[1], coords[2],
                             this->result_.at(this->dict_.getIndex("population"))->operator[](voxel),
@@ -869,7 +870,7 @@ void Action_GIGist::Print() {
   }
   // The atom densities of the solvent compared to the reference density.
   if (this->writeDx_) {
-    for (unsigned int i = 0; i < this->resultV_.size(); ++i) {
+    for (int i = 0; i < static_cast<int>( this->resultV_.size() ); ++i) {
       this->writeDxFile("g_" + this->dict_.getElement(this->result_.size() + i) + ".dx", this->resultV_.at(i));
     }
   }
@@ -911,10 +912,10 @@ double Action_GIGist::calcEnergy(double r_2, int a1, int a2) {
  * @return: The squared distance between the two atoms.
  */
 double Action_GIGist::calcDistanceSqrd(ActionFrame &frm, int a1, int a2) {
-    Matrix_3x3 ucell, recip;
-    double dist = 0;
-    Vec3 vec1 = Vec3(frm.Frm().XYZ(a1));
-    Vec3 vec2 = Vec3(frm.Frm().XYZ(a2));
+    Matrix_3x3 ucell{}, recip{};
+    double dist{ 0.0 };
+    Vec3 vec1{frm.Frm().XYZ(a1)};
+    Vec3 vec2{frm.Frm().XYZ(a2)};
     switch( image_.ImageType() ) {
         case NONORTHO:
             frm.Frm().BoxCrd().ToRecip(ucell, recip);
@@ -944,8 +945,8 @@ double Action_GIGist::calcDistanceSqrd(ActionFrame &frm, int a1, int a2) {
 double Action_GIGist::calcElectrostaticEnergy(double r_2_i, int a1, int a2) {
     //double q1 = this->top_->operator[](a1).Charge();
     //double q2 = this->top_->operator[](a2).Charge();
-    double q1 = this->charges_.at(a1);
-    double q2 = this->charges_.at(a2);
+    double q1{ this->charges_.at(a1) };
+    double q2{ this->charges_.at(a2) };
     return q1 * Constants::ELECTOAMBER * q2 * Constants::ELECTOAMBER * sqrt(r_2_i);
 }
 
@@ -962,8 +963,8 @@ double Action_GIGist::calcElectrostaticEnergy(double r_2_i, int a1, int a2) {
 double Action_GIGist::calcVdWEnergy(double r_2_i, int a1, int a2) {
     // Attention, both r_6 and r_12 are actually inverted. This is very ok, and makes the calculation faster.
     // However, it is not noted, thus it could be missleading
-    double r_6 = r_2_i * r_2_i * r_2_i;
-    double r_12 = r_6 * r_6;
+    double r_6{ r_2_i * r_2_i * r_2_i };
+    double r_12{ r_6 * r_6 };
     NonbondType const &params = this->top_->GetLJparam(a1, a2);
     return params.A() * r_12 - params.B() * r_6;
 }
@@ -980,23 +981,32 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
   if(nwtotal < 2) {
     return ret;
   }
+<<<<<<< HEAD
   double dTSo_n{ 0.0 };
   int water_count{ 0 };
+=======
+  double result{ 0.0 };
+>>>>>>> 2264529 (Fixes for C++11)
   for (int n0 = 0; n0 < nwtotal; ++n0) {
-    double NNr = 100000;
+    double NNr{ 100000.0 };
     for (int n1 = 0; n1 < nwtotal; ++n1) {
       if (n1 == n0) {
         continue;
       }
 
-      double rR = this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1));
-      if ( (rR < NNr) && (rR > 0) ) {
+      double rR{ this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1)) };
+      if ( (rR < NNr) && (rR > 0.0) ) {
         NNr = rR;
       }
     }
+<<<<<<< HEAD
     if (NNr < 99999 && NNr > 0) {
       ++water_count;
       dTSo_n += log(NNr * NNr * NNr / (3.0 * Constants::TWOPI));
+=======
+    if (NNr < 9999.0 && NNr > 0.0) {
+      result += log(NNr * NNr * NNr * nwtotal / (3.0 * Constants::TWOPI));
+>>>>>>> 2264529 (Fixes for C++11)
     }
   }
   dTSo_n += water_count * log(water_count);
@@ -1013,6 +1023,7 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
  *          entropy, as well as the six integral entropy.
  */
 std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
+<<<<<<< HEAD
   // Will hold dTStrans (norm, dens) and dTSsix (norm, dens)
   std::vector<double> ret(4);
   // dTStrans uses all solvents => use nwtotal
@@ -1026,28 +1037,38 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
         // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
         ++nw_six;
     }
+=======
+  // Will hold the two values dTStrans and dTSsix
+  std::vector<double> ret{};
+  ret.push_back(0);
+  ret.push_back(0);
+  int nwtotal{ static_cast<int>( (*this->result_.at(this->dict_.getIndex("population")))[voxel] ) };
+  for (int n0 = 0; n0 < nwtotal; ++n0) {
+    double NNd{ HUGE };
+    double NNs{ HUGE };
+>>>>>>> 2264529 (Fixes for C++11)
     // Self is not migrated to the function, as it would need to have a check against self comparison
     // The need is not entirely true, as it would produce 0 as a value.
     for (int n1 = 0; n1 < nwtotal; ++n1) {
       if (n1 == n0) {
         continue;
       }
-      double dd = (this->waterCoordinates_.at(voxel).at(n0) - this->waterCoordinates_.at(voxel).at(n1)).Magnitude2();
+      double dd{ (this->waterCoordinates_.at(voxel).at(n0) - this->waterCoordinates_.at(voxel).at(n1)).Magnitude2() };
       if (dd > 0 && dd < NNd) {
         NNd = dd;
       }
-      double rR = this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1));
-      double ds = rR * rR + dd;
+      double rR{ this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1)) };
+      double ds{ rR * rR + dd };
       if (ds < NNs && ds > 0) {
         NNs = ds;
       }
     }
     // Get the values for the dimensions
-    Vec3 step;
+    Vec3 step{};
     step.SetVec(this->dimensions_[2] * this->dimensions_[1], this->dimensions_[2], 1);
-    int x = voxel / (this->dimensions_[2] * this->dimensions_[1]);
-    int y = (voxel / (int)this->dimensions_[2]) % (int)this->dimensions_[1];
-    int z = voxel % (int)this->dimensions_[2];
+    int x{ voxel / (static_cast<int>( this->dimensions_[2] ) * static_cast<int>( this->dimensions_[1]) ) };
+    int y{ (voxel / static_cast<int>( this->dimensions_[2] ) ) % static_cast<int>( this->dimensions_[1] ) };
+    int z{ voxel % static_cast<int>( this->dimensions_[2] ) };
     // Check if the value is inside the boundaries, i.e., there is still a neighbour in
     // each direction.
     if ( !((x <= 0                       ) || (y <= 0                       ) || (z <= 0                       ) ||
@@ -1057,7 +1078,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       for (int dim1 = -1; dim1 < 2; ++dim1) {
         for (int dim2 = -1; dim2 < 2; ++dim2) {
           for (int dim3 = -1; dim3 < 2; ++dim3) {
-            int voxel2 = voxel + dim1 * step[0] + dim2 * step[1] + dim3 * step[2];
+            int voxel2{ voxel + dim1 * static_cast<int>( step[0] ) + dim2 * static_cast<int>( step[1] ) + dim3 * static_cast<int>( step[2] ) };
             // Checks if the voxel2 is the same as voxel, if so, has already been calculated
             if (voxel2 != voxel) {
               this->calcTransEntropyDist(voxel, voxel2, n0, NNd, NNs);
@@ -1109,17 +1130,17 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
  *                one is smaller, saves it here.
  */
 void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double &NNd, double &NNs) {
-  int nSolvV2 = (*this->result_.at(this->dict_.getIndex("population")))[voxel2];
+  int nSolvV2{ static_cast<int>( (*this->result_.at(this->dict_.getIndex("population")))[voxel2] ) };
   for (int n1 = 0; n1 < nSolvV2; ++n1) {
     if (voxel1 == voxel2 && n0 == n1) {
       continue;
     }
-    double dd = (this->waterCoordinates_.at(voxel1).at(n0) - this->waterCoordinates_.at(voxel2).at(n1)).Magnitude2();
+    double dd{ (this->waterCoordinates_.at(voxel1).at(n0) - this->waterCoordinates_.at(voxel2).at(n1)).Magnitude2() };
     if (dd > Constants::SMALL && dd < NNd) {
       NNd = dd;
     }
-    double rR = this->quaternions_.at(voxel1).at(n0).distance(this->quaternions_.at(voxel2).at(n1));
-    double ds = rR * rR + dd;
+    double rR{ this->quaternions_.at(voxel1).at(n0).distance(this->quaternions_.at(voxel2).at(n1)) };
+    double ds{ rR * rR + dd };
     if (ds < NNs && ds > 0) {
       NNs = ds;
     }
@@ -1155,9 +1176,9 @@ int Action_GIGist::weight(std::string atom) {
  * @argument data: The data to write to the dx file.
  */
 void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
-  std::ofstream file;
+  std::ofstream file{};
   file.open(name.c_str());
-  Vec3 origin = this->center_ - this->dimensions_ * (0.5 * this->voxelSize_);
+  Vec3 origin{ this->center_ - this->dimensions_ * (0.5 * this->voxelSize_) };
   file << "object 1 class gridpositions counts " << this->dimensions_[0] << " " << this->dimensions_[1] << " " << this->dimensions_[2] << "\n";
   file << "origin " << origin[0] << " " << origin[1] << " " << origin[2] << "\n";
   file << "delta " << this->voxelSize_ << " 0 0\n";
@@ -1165,12 +1186,12 @@ void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
   file << "delta 0 0 " << this->voxelSize_ << "\n";
   file << "object 2 class gridconnections counts " << this->dimensions_[0] << " " << this->dimensions_[1] << " " << this->dimensions_[2] << "\n";
   file << "object 3 class array type double rank 0 items " << this->nVoxels_ << " data follows" << "\n";
-  unsigned int i = 0;
-  while ( (i + 3) < this->nVoxels_ ) {
+  int i{ 0 };
+  while ( (i + 3) < static_cast<int>( this->nVoxels_  )) {
     file << data.at(i) << " " << data.at(i + 1) << " " << data.at(i + 2) << "\n";
     i +=3;
   }
-  while (i < this->nVoxels_) {
+  while (i < static_cast<int>( this->nVoxels_ )) {
     file << data.at(i) << " ";
     i++;
   }
@@ -1186,22 +1207,20 @@ void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
  * @return A vector, of class Vec3, holding the center of mass.
  */
 Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, const double *coords) {
-  double mass = 0;
-  double x = 0, y = 0, z = 0;
+  double mass{ 0.0 };
+  double x{ 0.0 }, y{ 0.0 }, z{ 0.0 };
   for (int i = 0; i < (atom_end - atom_begin); ++i) {
-    double currentMass = this->masses_.at(i + atom_begin);
+    double currentMass{this->masses_.at(i + atom_begin)};
     x += coords[i * 3    ] * currentMass;
     y += coords[i * 3 + 1] * currentMass;
     z += coords[i * 3 + 2] * currentMass;
     mass += currentMass;
   }
-  Vec3 coord{x / mass, y / mass, z / mass};
-  return coord;
+  return Vec3{x / mass, y / mass, z / mass};
 }
 
 /**
  * A function to bin a certain vector to a grid. This still does more, will be fixed.
- * FIXME: Refactor further, so that 
  * @argument begin: The first atom in the molecule.
  * @argument end: The last atom in the molecule.
  * @argument vec: The vector to be binned.
@@ -1215,21 +1234,21 @@ int Action_GIGist::bin(int begin, int end, Vec3 vec, ActionFrame frame) {
   if (this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k))
   {
     voxel = this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k);
-		
+    
     // Does not necessarily need this in this function
     this->waterCoordinates_.at(voxel).push_back(vec);
 
-		#ifdef _OPENMP
-		#pragma omp critical
-		{
-		#endif
-		this->result_.at(this->dict_.getIndex("population"))->UpdateVoxel(voxel, 1.0);
-		if (!this->use_com_) {
-    	this->resultV_.at(this->dict_.getIndex(this->centerSolventAtom_) - this->result_.size()).at(voxel) += 1.0;
-		}
-		#ifdef _OPENMP
-		}
-		#endif
+    #ifdef _OPENMP
+    #pragma omp critical
+    {
+    #endif
+    this->result_.at(this->dict_.getIndex("population"))->UpdateVoxel(voxel, 1.0);
+    if (!this->use_com_) {
+      this->resultV_.at(this->dict_.getIndex(this->centerSolventAtom_) - this->result_.size()).at(voxel) += 1.0;
+    }
+    #ifdef _OPENMP
+    }
+    #endif
 
     this->calcDipole(begin, end, voxel, frame);
 
@@ -1241,9 +1260,9 @@ int Action_GIGist::bin(int begin, int end, Vec3 vec, ActionFrame frame) {
  * Calculates the total dipole for a given set of atoms.
  * @argument begin: The index of the first atom of the set.
  * @argument end: The index of the last atom of the set.
- * @argument voxel: The voxel in which the values should be binned (FIXME: Change that the function returns a value)
+ * @argument voxel: The voxel in which the values should be binned
  * @argument frame: The current frame.
- * @return Nothing at the moment (TODO: Check fixme)
+ * @return Nothing at the moment
  */
 void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame) {
   #if !defined _OPENMP && !defined CUDA
@@ -1255,22 +1274,22 @@ void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame)
     for (int atoms = begin; atoms < end; ++atoms)
     {
       const double *XYZ = frame.Frm().XYZ(atoms);
-      double charge{ this->top_->operator[](atoms).Charge() };
+      double charge{ this->charges_.at(atoms) };
       DPX += charge * XYZ[0];
       DPY += charge * XYZ[1];
       DPZ += charge * XYZ[2];
     }
 
-		#ifdef _OPENMP
-		#pragma omp critical
-		{
-		#endif
+    #ifdef _OPENMP
+    #pragma omp critical
+    {
+    #endif
     this->result_.at(this->dict_.getIndex("dipole_xtemp"))->UpdateVoxel(voxel, DPX);
     this->result_.at(this->dict_.getIndex("dipole_ytemp"))->UpdateVoxel(voxel, DPY);
     this->result_.at(this->dict_.getIndex("dipole_ztemp"))->UpdateVoxel(voxel, DPZ);
-		#ifdef _OPENMP
-		}
-		#endif
+    #ifdef _OPENMP
+    }
+    #endif
 #if !defined _OPENMP && !defined CUDA
     this->tDipole_.Stop();
 #endif
@@ -1290,12 +1309,13 @@ void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame)
  * @argument headAtomIndex: The index of the head atom, when counting the first
  *                           atom as 0, as indices naturally do.
  * @return: A quaternion holding the rotational value.
+ * FIXME: Decision for the different X and Y coordinates has to be done at the beginning.
  */
 Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> molAtomCoords, Vec3 center, int headAtomIndex) {
-  Vec3 X;
-  Vec3 Y;
-  bool setX = false;
-  bool setY = false;    
+  Vec3 X{};
+  Vec3 Y{};
+  bool setX{false};
+  bool setY{false};    
   for (unsigned int i = 0; i < molAtomCoords.size(); ++i) {
     if ((int)i != headAtomIndex) {
       if (setX && !setY) {
@@ -1303,14 +1323,21 @@ Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> molAt
                   molAtomCoords.at(i)[1] - center[1], 
                   molAtomCoords.at(i)[2] - center[2]);
         Y.Normalize();
-        setY = true;
+        // Check if the two vectors are parallel.
+        // TODO: Check FIXME at the start
+        if( !this->almostEqual(X * Y, 1.0) ) {
+          setY = true;
+        }
+        
       }
       if (!setX) {
         X.SetVec(molAtomCoords.at(i)[0] - center[0], 
                   molAtomCoords.at(i)[1] - center[1], 
                   molAtomCoords.at(i)[2] - center[2]);
-        X.Normalize();
-        setX = true;
+        if (!(X.Length() < 0.001)) {
+          X.Normalize();
+          setX = true;
+        }
       }
       if (setX && setY) {
         break;
@@ -1326,6 +1353,32 @@ Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> molAt
    quat.invert();
    return quat;
 }
+
+/**
+ * Checks for two numbers being almost equal. Also takes care of problems arising due to values close to zero.
+ * This comaprison is implemented as suggested by 
+ * https://www.learncpp.com/cpp-tutorial/relational-operators-and-floating-point-comparisons/
+ * @argument input: The input number that should be compared.
+ * @argument control: The control number to which input should be almost equal.
+ * @return true if they are almost equal, false otherwise.
+ */
+bool Action_GIGist::almostEqual(double input, double control) 
+{
+  double abs_inp{std::fabs(input)};
+  double abs_cont{std::fabs(control)};
+  double abs_diff{std::abs(input - control)};
+
+  // Check if the absolute error is already smaller than epsilon (errors close to 0)
+  if (abs_diff < __DBL_EPSILON__) {
+    return true;
+  }
+
+  // Fall back to Knuth's algorithm
+  return abs_diff <= ( (abs_inp < abs_cont) ? abs_cont : abs_inp) * __DBL_EPSILON__;
+}
+
+
+
 // Functions used when CUDA is specified.
 #ifdef CUDA
 
@@ -1358,8 +1411,8 @@ void Action_GIGist::freeGPUMemory(void) {
  * @throws: CudaException
  */
 void Action_GIGist::copyToGPU(void) {
-  float grids[3] = {(float)this->gridStart_[0], (float)this->gridStart_[1], (float)this->gridStart_[2]};
-  float gride[3] = {(float)this->gridEnd_[0], (float)this->gridEnd_[1], (float)this->gridEnd_[2]};
+  float grids[3]{ (float)this->gridStart_[0], (float)this->gridStart_[1], (float)this->gridStart_[2] };
+  float gride[3]{ (float)this->gridEnd_[0], (float)this->gridEnd_[1], (float)this->gridEnd_[2] };
   try {
     copyMemoryToDevice(&(this->NBIndex_[0]), this->NBindex_c_, this->NBIndex_.size() * sizeof(int));
     copyMemoryToDevice(grids, this->min_c_, 3 * sizeof(float));
