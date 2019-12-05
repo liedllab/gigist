@@ -6,8 +6,8 @@
 
 /**
  * Allocate memory on the GPU.
- * @parameter array: The pointer to the array, which will be allocated on the GPU.
- * @parameter size: An integer giving the size of the array, which will be allocated.
+ * @param array: The pointer to the array, which will be allocated on the GPU.
+ * @param size: An integer giving the size of the array, which will be allocated.
  * @throws: CudaException if a problem occurs.
  */
 __host__
@@ -25,9 +25,9 @@ void allocateCuda(void **array, int size) {
 
 /**
  * Copy memory from the CPU to the GPU.
- * @parameter array: The array from which the values shall be copied.
- * @parameter array_c: The array on the device, to which the values shall be copied.
- * @parameter size: The size of the stuff which will be copied.
+ * @param array: The array from which the values shall be copied.
+ * @param array_c: The array on the device, to which the values shall be copied.
+ * @param size: The size of the stuff which will be copied.
  * @throws: CudaException if something goes wrong.
  */
 __host__
@@ -41,15 +41,15 @@ void copyMemoryToDevice(void *array, void *array_c, int size) {
 
 /**
  * A simple helper function that copies a lot of stuff to the GPU (as structs).
- * @parameter charge: An array holding the charges for the different atoms.
- * @parameter atomtype: An array holding the integers for the atom types of the different atoms.
- * @parameter solvent: An array of boolean values, holding the information whether a certain atom is solvent or solute.
- * @parameter atomNumber: The total number of atoms.
- * @parameter atomProps_c: A pointer to an array on the GPU, which will hold the atom properties.
- * @parameter ljA: An array holding the lennard-jones parameter A for each atom type pair.
- * @parameter ljB: An array holding the lennard-jones parameter B for each atom type pair.
- * @parameter length: The length of the two aforementioned arrays (ljA & ljB).
- * @parameter lJparams_c: A pointer to an array on the GPU, which will hold the lj parameters.
+ * @param charge: An array holding the charges for the different atoms.
+ * @param atomtype: An array holding the integers for the atom types of the different atoms.
+ * @param solvent: An array of boolean values, holding the information whether a certain atom is solvent or solute.
+ * @param atomNumber: The total number of atoms.
+ * @param atomProps_c: A pointer to an array on the GPU, which will hold the atom properties.
+ * @param ljA: An array holding the lennard-jones parameter A for each atom type pair.
+ * @param ljB: An array holding the lennard-jones parameter B for each atom type pair.
+ * @param length: The length of the two aforementioned arrays (ljA & ljB).
+ * @param lJparams_c: A pointer to an array on the GPU, which will hold the lj parameters.
  * @throws: CudaException if something bad happens.
  */
 __host__
@@ -98,7 +98,7 @@ void copyMemoryToDeviceStruct(float *charge, int *atomtype, bool *solvent, int *
 
 /**
  * Free an array.
- * @parameter array: The array you want to free.
+ * @param array: The array you want to free.
  */
 __host__
 void freeCuda(void *array) {
@@ -115,7 +115,7 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
                             int boxinfo, float *recip_o_box, float *ucell, int maxAtoms, float *min_c, float *max_c, int headAtomType, 
                             float neighbourCut2, int *result_o, int *result_n, float *result_w_c, float *result_s_c,
                             int *result_O_c, int *result_N_c, bool doorder) {
-  Test *coords_c   = NULL;
+  Coordinates_GPU *coords_c   = NULL;
   float *recip_b_c  = NULL;
   float *ucell_c    = NULL;
   
@@ -123,8 +123,8 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
 
   float *result_A = (float *) calloc(maxAtoms, sizeof(float));
   float *result_s = (float *) calloc(maxAtoms, sizeof(float));
-  // TODO: Fix this, test is actually a quite bad name here!
-  Test *coord_array = (Test *) calloc(maxAtoms, sizeof(Test));
+  
+  Coordinates_GPU *coord_array = (Coordinates_GPU *) calloc(maxAtoms, sizeof(Coordinates_GPU));
   
   // Casting
   AtomProperties *sender = (AtomProperties *) molecule_c;
@@ -142,9 +142,8 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
   }
   
   // Add the coordinates to the array.
-  // TODO: Fix Test here also!
   for (int i = 0; i < maxAtoms; ++i) {
-    coord_array[i] = Test(&coords[i * 3]);
+    coord_array[i] = Coordinates_GPU(&coords[i * 3]);
   }
 
   // vectors that will return the necessary information.
@@ -153,14 +152,14 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
   std::vector<float> result_eww;
 
   // Allocate space on the GPU
-  if (cudaMalloc(&coords_c, maxAtoms * sizeof(Test)) != cudaSuccess) {
+  if (cudaMalloc(&coords_c, maxAtoms * sizeof(Coordinates_GPU)) != cudaSuccess) {
     free(result_A); free(result_s); free(coord_array);
     throw CudaException();
   }
 
 
   // Copy the data to the GPU
-  if (cudaMemcpy(coords_c, coord_array, maxAtoms * sizeof(Test), cudaMemcpyHostToDevice) != cudaSuccess) {
+  if (cudaMemcpy(coords_c, coord_array, maxAtoms * sizeof(Coordinates_GPU), cudaMemcpyHostToDevice) != cudaSuccess) {
     cudaFree(coords_c); cudaFree(recip_b_c); cudaFree(ucell_c);
     free(result_A); free(result_s); free(coord_array);
     throw CudaException();
@@ -290,14 +289,14 @@ std::vector<Quaternion<float> > shoveQuaternionsTest(std::vector<Quaternion<floa
 
 /**
  * Calculates the entropy on the GPU (this is not really necessary and does not lead to a significant speed up).
- * @parameter coords: The coordinates of the different water molecules.
- * @parameter x: The number of grid voxels in the x direction.
- * @parameter y: The number of grid voxels in the y direction.
- * @parameter z: The number of grid voxels in the z direction.
- * @parameter quats: A vector object holding all the quaternions.
- * @parameter temp: The temperature.
- * @parameter rho0: The reference density.
- * @parameter nFrames: The total number of frames.
+ * @param coords: The coordinates of the different water molecules.
+ * @param x: The number of grid voxels in the x direction.
+ * @param y: The number of grid voxels in the y direction.
+ * @param z: The number of grid voxels in the z direction.
+ * @param quats: A vector object holding all the quaternions.
+ * @param temp: The temperature.
+ * @param rho0: The reference density.
+ * @param nFrames: The total number of frames.
  * @return: A vector holding the values for dTStrans, dTSorient and dTSsix.
  * @throws: A CudaException on error.
  */

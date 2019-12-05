@@ -23,9 +23,9 @@
 
 
 #include <vector>
-#include <math.h>
+#include <cmath>
 #include <exception>
-#include <stdlib.h>
+#include <cstdlib>
 #include <string>
 #include <fstream>
 #include <map>
@@ -71,7 +71,9 @@
 #define DEBYE 0.20822678
 
 
-
+#ifndef HUGE
+#define HUGE 3.40282347e+38F
+#endif
 
 
 /**
@@ -255,8 +257,8 @@ private:
   int weight(std::string);
 
   // In: Action_GIGIST.cpp
-  // line: 1105
-  void writeDxFile(std::string, std::vector<double>);
+  // line: 1058
+  void writeDxFile(std::string, std::vector<double> &);
 
   Vec3 calcCenterOfMass(int atom_begin, int atom_end, const double *coordinates);
 
@@ -264,7 +266,7 @@ private:
 
   void calcDipole(int begin, int end, int voxel, ActionFrame frame);
 
-  Quaternion<DOUBLE_O_FLOAT> calcQuaternion(std::vector<Vec3> molAtomCoords, Vec3 center, int headAtomIndex);
+  Quaternion<DOUBLE_O_FLOAT> calcQuaternion(std::vector<Vec3> &molAtomCoords, Vec3 &center, int headAtomIndex);
 
   bool almostEqual(double input, double control);
 
