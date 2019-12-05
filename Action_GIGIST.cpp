@@ -83,8 +83,8 @@ Action_GIGist::~Action_GIGist() {
 
 /**
  * Initialize the GIST calculation by setting up the users input.
- * @argument argList: The argument list of the user.
- * @argument actionInit: The action initialization object.
+ * @param argList: The argument list of the user.
+ * @param actionInit: The action initialization object.
  * @return: Action::OK on success and Action::ERR on error.
  */
 Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, int test) {
@@ -211,7 +211,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
 
 /**
  * Setup for the GIST calculation. Does everything involving the Topology file.
- * @argument setup: The setup object of the cpptraj code libraries.
+ * @param setup: The setup object of the cpptraj code libraries.
  * @return: Action::OK on success, Action::ERR otherwise.
  */
 Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
@@ -308,8 +308,8 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
  * Starts the calculation of GIST. Can use either CUDA, OPENMP or single thread code.
  * This function is actually way too long. Refactoring of this code might help with
  * readability.
- * @argument frameNum: The number of the frame.
- * @argument frame: The frame itself.
+ * @param frameNum: The number of the frame.
+ * @param frame: The frame itself.
  * @return: Action::ERR on error, Action::OK if everything ran smoothly.
  */
 Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
@@ -894,9 +894,9 @@ void Action_GIGist::Print() {
 
 /**
  * Calculate the Van der Waals and electrostatic energy.
- * @argument r_2: The squared distance between atom 1 and atom 2.
- * @argument a1: The first atom.
- * @argument a2: The second atom.
+ * @param r_2: The squared distance between atom 1 and atom 2.
+ * @param a1: The first atom.
+ * @param a2: The second atom.
  * @return: The interaction energy between the two atoms.
  */
 double Action_GIGist::calcEnergy(double r_2, int a1, int a2) {
@@ -906,9 +906,9 @@ double Action_GIGist::calcEnergy(double r_2, int a1, int a2) {
 
 /**
  * Calculate the squared distance between two atoms.
- * @argument frm: The frame for which to calculate the distance.
- * @argument a1: The first atom for the calculation.
- * @argument a2: The second atom for the calculation.
+ * @param frm: The frame for which to calculate the distance.
+ * @param a1: The first atom for the calculation.
+ * @param a2: The second atom for the calculation.
  * @return: The squared distance between the two atoms.
  */
 double Action_GIGist::calcDistanceSqrd(ActionFrame &frm, int a1, int a2) {
@@ -937,9 +937,9 @@ double Action_GIGist::calcDistanceSqrd(ActionFrame &frm, int a1, int a2) {
  * Calculate the electrostatic energy between two atoms, as
  * follows from:
  * E(el) = q1 * q2 / r
- * @argument r_2_i: The inverse of the squared distance between the atoms.
- * @argument a1: The atom index of atom 1.
- * @argument a2: The atom index of atom 2.
+ * @param r_2_i: The inverse of the squared distance between the atoms.
+ * @param a1: The atom index of atom 1.
+ * @param a2: The atom index of atom 2.
  * @return: The electrostatic energy.
  */
 double Action_GIGist::calcElectrostaticEnergy(double r_2_i, int a1, int a2) {
@@ -955,9 +955,9 @@ double Action_GIGist::calcElectrostaticEnergy(double r_2_i, int a1, int a2) {
  * two different atoms, as follows:
  * E(vdw) = A / (r ** 12) - B / (r ** 6)
  * Be aware that the inverse is used, as to calculate faster.
- * @argument r_2_i: The inverse of the squared distance between the two atoms.
- * @argument a1: The atom index of atom1.
- * @argument a2: The atom index of atom2.
+ * @param r_2_i: The inverse of the squared distance between the two atoms.
+ * @param a1: The atom index of atom1.
+ * @param a2: The atom index of atom2.
  * @return: The VdW interaction energy.
  */
 double Action_GIGist::calcVdWEnergy(double r_2_i, int a1, int a2) {
@@ -972,7 +972,7 @@ double Action_GIGist::calcVdWEnergy(double r_2_i, int a1, int a2) {
 /**
  * Calculate the orientational entropy of the water atoms
  * in a given voxel.
- * @argument voxel: The index of the voxel.
+ * @param voxel: The index of the voxel.
  * @return: The entropy of the water molecules in that voxel.
  */
 std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
@@ -981,12 +981,8 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
   if(nwtotal < 2) {
     return ret;
   }
-<<<<<<< HEAD
   double dTSo_n{ 0.0 };
   int water_count{ 0 };
-=======
-  double result{ 0.0 };
->>>>>>> 2264529 (Fixes for C++11)
   for (int n0 = 0; n0 < nwtotal; ++n0) {
     double NNr{ 100000.0 };
     for (int n1 = 0; n1 < nwtotal; ++n1) {
@@ -999,14 +995,9 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
         NNr = rR;
       }
     }
-<<<<<<< HEAD
     if (NNr < 99999 && NNr > 0) {
       ++water_count;
       dTSo_n += log(NNr * NNr * NNr / (3.0 * Constants::TWOPI));
-=======
-    if (NNr < 9999.0 && NNr > 0.0) {
-      result += log(NNr * NNr * NNr * nwtotal / (3.0 * Constants::TWOPI));
->>>>>>> 2264529 (Fixes for C++11)
     }
   }
   dTSo_n += water_count * log(water_count);
@@ -1018,12 +1009,11 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
 
 /**
  * Calculate the translational entropy.
- * @argument voxel: The voxel for which to calculate the translational entropy.
+ * @param voxel: The voxel for which to calculate the translational entropy.
  * @return: A vector type object, holding the values for the translational
  *          entropy, as well as the six integral entropy.
  */
 std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
-<<<<<<< HEAD
   // Will hold dTStrans (norm, dens) and dTSsix (norm, dens)
   std::vector<double> ret(4);
   // dTStrans uses all solvents => use nwtotal
@@ -1037,16 +1027,6 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
         // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
         ++nw_six;
     }
-=======
-  // Will hold the two values dTStrans and dTSsix
-  std::vector<double> ret{};
-  ret.push_back(0);
-  ret.push_back(0);
-  int nwtotal{ static_cast<int>( (*this->result_.at(this->dict_.getIndex("population")))[voxel] ) };
-  for (int n0 = 0; n0 < nwtotal; ++n0) {
-    double NNd{ HUGE };
-    double NNs{ HUGE };
->>>>>>> 2264529 (Fixes for C++11)
     // Self is not migrated to the function, as it would need to have a check against self comparison
     // The need is not entirely true, as it would produce 0 as a value.
     for (int n1 = 0; n1 < nwtotal; ++n1) {
@@ -1121,12 +1101,12 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
 /**
  * Calculates the distance between the different atoms in the voxels.
  * Both, for the distance in space, as well as the angular distance.
- * @argument voxel1: The first of the two voxels.
- * @argument voxel2: The voxel to compare voxel1 to.
- * @argument n0: The water molecule of the first voxel.
- * @argument NNd: The lowest distance in space. If the calculated one
+ * @param voxel1: The first of the two voxels.
+ * @param voxel2: The voxel to compare voxel1 to.
+ * @param n0: The water molecule of the first voxel.
+ * @param NNd: The lowest distance in space. If the calculated one
  *                is smaller, saves it here.
- * @argument NNs: The lowest distance in angular space. If the calculated
+ * @param NNs: The lowest distance in angular space. If the calculated
  *                one is smaller, saves it here.
  */
 void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double &NNd, double &NNs) {
@@ -1149,7 +1129,7 @@ void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double 
 
 /**
  * A weighting for the different elements.
- * @argument atom: A string holding the element symbol.
+ * @param atom: A string holding the element symbol.
  * @return a weight for that particular element.
  **/
 int Action_GIGist::weight(std::string atom) {
@@ -1172,10 +1152,10 @@ int Action_GIGist::weight(std::string atom) {
  * Writes a dx file out. The dx file is the same file as the cpptraj dx file, however,
  * this is under my complete control, cpptraj is not.
  * Still for most calculations, the cpptraj tool is used.
- * @argument name: A string holding the name of the written file.
- * @argument data: The data to write to the dx file.
+ * @param name: A string holding the name of the written file.
+ * @param data: The data to write to the dx file.
  */
-void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
+void Action_GIGist::writeDxFile(std::string name, std::vector<double> &data) {
   std::ofstream file{};
   file.open(name.c_str());
   Vec3 origin{ this->center_ - this->dimensions_ * (0.5 * this->voxelSize_) };
@@ -1201,9 +1181,9 @@ void Action_GIGist::writeDxFile(std::string name, std::vector<double> data) {
 /**
  * Calculate the center of mass for a set of atoms. These atoms do not necessarily need
  * to belong to the same molecule, but in this case do.
- * @argument atom_begin: The first atom in the set.
- * @argument atom_end: The index of the last atom in the set.
- * @argument coords: The current coordinates, on which processing occurs.
+ * @param atom_begin: The first atom in the set.
+ * @param atom_end: The index of the last atom in the set.
+ * @param coords: The current coordinates, on which processing occurs.
  * @return A vector, of class Vec3, holding the center of mass.
  */
 Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, const double *coords) {
@@ -1221,10 +1201,10 @@ Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, const double 
 
 /**
  * A function to bin a certain vector to a grid. This still does more, will be fixed.
- * @argument begin: The first atom in the molecule.
- * @argument end: The last atom in the molecule.
- * @argument vec: The vector to be binned.
- * @argument frame: The current frame.
+ * @param begin: The first atom in the molecule.
+ * @param end: The last atom in the molecule.
+ * @param vec: The vector to be binned.
+ * @param frame: The current frame.
  * @return The voxel this frame was binned into. If binning was not succesfull, returns -1.
  */
 int Action_GIGist::bin(int begin, int end, Vec3 vec, ActionFrame frame) {
@@ -1258,10 +1238,10 @@ int Action_GIGist::bin(int begin, int end, Vec3 vec, ActionFrame frame) {
 
 /**
  * Calculates the total dipole for a given set of atoms.
- * @argument begin: The index of the first atom of the set.
- * @argument end: The index of the last atom of the set.
- * @argument voxel: The voxel in which the values should be binned
- * @argument frame: The current frame.
+ * @param begin: The index of the first atom of the set.
+ * @param end: The index of the last atom of the set.
+ * @param voxel: The voxel in which the values should be binned
+ * @param frame: The current frame.
  * @return Nothing at the moment
  */
 void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame) {
@@ -1303,15 +1283,15 @@ void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame)
  * If the center is set to something other than an atomic position,
  * headAtomIndex should evaluate to a nonsensical number (preferrably
  * a negative value).
- * @argument molAtomCoords: The set of atomic cooordinates, saved as a vector
+ * @param molAtomCoords: The set of atomic cooordinates, saved as a vector
  *                           of Vec3 objects.
- * @argument center: The center coordinates.
- * @argument headAtomIndex: The index of the head atom, when counting the first
+ * @param center: The center coordinates.
+ * @param headAtomIndex: The index of the head atom, when counting the first
  *                           atom as 0, as indices naturally do.
  * @return: A quaternion holding the rotational value.
  * FIXME: Decision for the different X and Y coordinates has to be done at the beginning.
  */
-Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> molAtomCoords, Vec3 center, int headAtomIndex) {
+Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> &molAtomCoords, Vec3 &center, int headAtomIndex) {
   Vec3 X{};
   Vec3 Y{};
   bool setX{false};
@@ -1358,8 +1338,8 @@ Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> molAt
  * Checks for two numbers being almost equal. Also takes care of problems arising due to values close to zero.
  * This comaprison is implemented as suggested by 
  * https://www.learncpp.com/cpp-tutorial/relational-operators-and-floating-point-comparisons/
- * @argument input: The input number that should be compared.
- * @argument control: The control number to which input should be almost equal.
+ * @param input: The input number that should be compared.
+ * @param control: The control number to which input should be almost equal.
  * @return true if they are almost equal, false otherwise.
  */
 bool Action_GIGist::almostEqual(double input, double control) 
