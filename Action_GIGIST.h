@@ -53,13 +53,15 @@
 #include <omp.h>
 #endif
 
+#ifndef HUGE
+#define HUGE 3.40282347e+38F
+#endif
 
 #ifdef CUDA
 #define DOUBLE_O_FLOAT float
 #else
 #define DOUBLE_O_FLOAT double
 #endif
-
 
 
 // Boltzmann Constant
