@@ -13,7 +13,7 @@
   * @return: The minimal distance in an orthorhombic box.
   */
 __device__ 
-float dist2_imageOrtho(float *vec1, float *vec2, BoxInfo box) {
+float dist2_imageOrtho(float *vec1, float *vec2, const BoxInfo& box) {
   if (box[0] == 0 || box[1] == 0 || box[2] == 0) {
     return -1;
   }
@@ -64,7 +64,7 @@ float dist2_imageOrtho(float *vec1, float *vec2, BoxInfo box) {
  * @param ret: The values to be returned. If null, returns into vec.
  */
 __device__
-void scalarProd(float* vec, BoxInfo mat3x3, float *ret) {
+void scalarProd(float* vec, const BoxInfo& mat3x3, float *ret) {
   if (ret != NULL) {
     ret[0] = vec[0] * mat3x3[0] + vec[1] * mat3x3[1] + vec[2] * mat3x3[2];
     ret[1] = vec[0] * mat3x3[3] + vec[1] * mat3x3[4] + vec[2] * mat3x3[5];
@@ -88,7 +88,7 @@ void scalarProd(float* vec, BoxInfo mat3x3, float *ret) {
  * @return: The minimal squared distance between two atoms, also considering the images.
  */
 __device__
-float dist2_imageNonOrtho(float *vec1, float *vec2, BoxInfo recip, UnitCell ucell) {
+float dist2_imageNonOrtho(float *vec1, float *vec2, const BoxInfo& recip, const UnitCell& ucell) {
   float vecRecip1[3];
   float vecRecip2[3];
   scalarProd(vec1, recip, vecRecip1);
@@ -110,7 +110,7 @@ float dist2_imageNonOrtho(float *vec1, float *vec2, BoxInfo recip, UnitCell ucel
  * @return: The new minimum, if it is smaller than finalMin, finalMin otherwise.
  */
 __device__
-float calcIfDistIsSmaller(float *f, float *vec2Cartesian, int nx, int ny, int nz, UnitCell ucell, float finalMin) {
+float calcIfDistIsSmaller(float *f, float *vec2Cartesian, int nx, int ny, int nz, const UnitCell& ucell, float finalMin) {
   float fx = f[0] + nx;
   float fy = f[1] + ny;
   float fz = f[2] + nz;
@@ -137,7 +137,7 @@ float calcIfDistIsSmaller(float *f, float *vec2Cartesian, int nx, int ny, int nz
  * @return: The minimal distance between images.
  */
 __device__
-float dist2_imageNonOrthoRecip(float * vec1, float * vec2, UnitCell ucell) {
+float dist2_imageNonOrthoRecip(float * vec1, float * vec2, const UnitCell& ucell) {
     
   // Bring the points back into the main unit cell
   float fx = vec1[0] - floor(vec1[0]);
@@ -176,7 +176,7 @@ float dist2_imageNonOrthoRecip(float * vec1, float * vec2, UnitCell ucell) {
  * Different function to calculate the distance
  */
 __device__
-float dist2_imageNonOrthoRecipTest(float * vec1, float * vec2, UnitCell ucell) {
+float dist2_imageNonOrthoRecipTest(float * vec1, float * vec2, const UnitCell& ucell) {
   float x = vec1[0] - vec2[0];
   float y = vec1[1] - vec2[1];
   float z = vec1[2] - vec2[2];
@@ -239,8 +239,8 @@ float calcTotalEnergy(float q1, float q2,
  * @return: The squared distance between two points.
  */
 __device__
-float calcDist(float *vec1, float *vec2, BoxInfo recip_o_box,
-                    UnitCell ucell) {
+float calcDist(float *vec1, float *vec2, const BoxInfo &recip_o_box,
+                    const UnitCell &ucell) {
   float r_2 = 0;
   switch(recip_o_box.boxinfo) {
     case 0:
