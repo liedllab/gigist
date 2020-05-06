@@ -1,5 +1,6 @@
 #include "Action_GIGIST.h"
-
+#include <iostream>
+#include <iomanip>
 
 /**
  * Standard constructor
@@ -318,9 +319,20 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
   std::vector<DOUBLE_O_FLOAT> eww_result(this->numberAtoms_);
   std::vector<DOUBLE_O_FLOAT> esw_result(this->numberAtoms_);
   std::vector<std::vector<int> > order_indices{};
+  std::vector<int> quat_indices{};
 
   if (placeWaterMolecules_ && this->nFrames_ == 1)
     this->writeOutSolute(frame);
+  if (this->use_com_ && this->nFrames_ == 0) 
+  {
+    for (Topology::mol_iterator mol = this->top_->MolStart(); mol < this->top_->MolEnd(); ++mol) {
+      if ((mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( this->top_->operator[](mol->BeginAtom()).MolNum() >= this->forceStart_ ))) 
+      {
+	      quat_indices = this->calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().xAddress());
+        break;
+      }
+    }
+  }
 
   // CUDA necessary information
   #ifdef CUDA
@@ -441,14 +453,24 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
             first = false;
           } else {
             size_t bin_i{}, bin_j{}, bin_k{};
-            if ( this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k) ) {
+            if ( this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k) 
+                    /*&& bin_i < dimensions_[0] && bin_j < dimensions_[1] && bin_k < dimensions_[2]*/) {
               std::string aName{ this->top_->operator[](atom1).ElementName() };
               long voxTemp{ this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k) };
               #ifdef _OPENMP
               #pragma omp critical
               {
               #endif
-              this->resultV_.at(this->dict_.getIndex(aName) - this->result_.size()).at(voxTemp) += 1.0;
+              try{
+                this->resultV_.at(this->dict_.getIndex(aName) - this->result_.size()).at(voxTemp) += 1.0;
+              } catch(std::out_of_range e)
+              {
+                std::cout << std::setprecision(30) << (size_t)((vec[0] + 35.0f) / 0.5f) << ", " << vec[1] << ", " << vec[2] << '\n';
+                std::cout << this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k) << '\n';
+                std::cout << bin_i << " " << bin_j << " " << bin_k << '\n';
+                std::cout << voxTemp << '\n';
+                throw std::out_of_range("");
+              }
               #ifdef _OPENMP
               }
               #endif
@@ -504,25 +526,25 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           quat = this->calcQuaternion(molAtomCoords, molAtomCoords.at(headAtomIndex), headAtomIndex);
         } else {
           // -1 Will never evaluate to true, so in the funciton it will have no consequence.
-          quat = this->calcQuaternion(molAtomCoords, com, -1);
+          quat = this->calcQuaternion(molAtomCoords, com, quat_indices);
         }
-        // The Quaternion would create the rotation of the lab coordinate system onto the
-        // calculated solvent coordinate system. The invers quaternion is exactly the rotation of
-        // the solvent coordinate system onto the lab coordinate system.
-        quat.invert();
-        #ifdef _OPENMP
-        #pragma omp critical
+        if (quat.initialized())
         {
-        #endif
-        this->quaternions_.at(voxel).push_back(quat);
-        #ifdef _OPENMP
+          #ifdef _OPENMP
+          #pragma omp critical
+          {
+          #endif
+          this->quaternions_.at(voxel).push_back(quat);
+          #ifdef _OPENMP
+          }
+          #endif
         }
-        #endif
+        
 
         #if !defined _OPENMP && !defined CUDA
         this->tRot_.Stop();
         #endif
-
+        
   // If energies are already here, calculate the energies right away.
   #ifdef CUDA
         /* 
@@ -628,14 +650,14 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
               double energy{ this->calcEnergy(r_2, atom1, atom2) };
               this->tEadd_.Stop();
               if (this->solvent_[atom2]) {
-  #ifdef _OPENMP
+              #ifdef _OPENMP
                 #pragma omp atomic
-  #endif
+               #endif
                 eww += energy;
               } else {
-  #ifdef _OPENMP
+              #ifdef _OPENMP
                 #pragma omp atomic
-  #endif
+              #endif
                 esw += energy;
               }
               if (this->atomTypes_.at(atom1) == this->headAtomType_ &&
@@ -702,6 +724,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
 #endif
     }
   }
+  
   #if defined _OPENMP && defined CUDA
   this->tHead_.Stop();
   #endif
@@ -911,7 +934,7 @@ double Action_GIGist::calcEnergy(double r_2, int a1, int a2) {
  * @param a2: The second atom for the calculation.
  * @return: The squared distance between the two atoms.
  */
-double Action_GIGist::calcDistanceSqrd(ActionFrame &frm, int a1, int a2) {
+double Action_GIGist::calcDistanceSqrd(const ActionFrame &frm, int a1, int a2) {
     Matrix_3x3 ucell{}, recip{};
     double dist{ 0.0 };
     Vec3 vec1{frm.Frm().XYZ(a1)};
@@ -1149,13 +1172,13 @@ int Action_GIGist::weight(std::string atom) {
 }
 
 /**
- * Writes a dx file out. The dx file is the same file as the cpptraj dx file, however,
+ * Writes a dx file. The dx file is the same file as the cpptraj dx file, however,
  * this is under my complete control, cpptraj is not.
  * Still for most calculations, the cpptraj tool is used.
  * @param name: A string holding the name of the written file.
  * @param data: The data to write to the dx file.
  */
-void Action_GIGist::writeDxFile(std::string name, std::vector<double> &data) {
+void Action_GIGist::writeDxFile(std::string name, const std::vector<double> &data) {
   std::ofstream file{};
   file.open(name.c_str());
   Vec3 origin{ this->center_ - this->dimensions_ * (0.5 * this->voxelSize_) };
@@ -1207,22 +1230,30 @@ Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, const double 
  * @param frame: The current frame.
  * @return The voxel this frame was binned into. If binning was not succesfull, returns -1.
  */
-int Action_GIGist::bin(int begin, int end, Vec3 vec, ActionFrame frame) {
+int Action_GIGist::bin(int begin, int end, const Vec3 &vec, const ActionFrame &frame) {
   size_t bin_i{}, bin_j{}, bin_k{};
   // This is set to -1, if binning is not possible, the function will return a nonsensical value of -1, which can be tested.
   int voxel{ -1 };
-  if (this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k))
+  if (this->result_.at(this->dict_.getIndex("population"))->Bin().Calc(vec[0], vec[1], vec[2], bin_i, bin_j, bin_k)
+      /*&& bin_i < dimensions_[0] && bin_j < dimensions_[1] && bin_k < dimensions_[2]*/)
   {
     voxel = this->result_.at(this->dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k);
     
     // Does not necessarily need this in this function
-    this->waterCoordinates_.at(voxel).push_back(vec);
+    try {
+      this->waterCoordinates_.at(voxel).push_back(vec);
+    } catch (std::out_of_range e)
+    {
+      std::cout << this->nFrames_ << '\n';
+      throw e;
+    }
 
     #ifdef _OPENMP
     #pragma omp critical
     {
     #endif
-    this->result_.at(this->dict_.getIndex("population"))->UpdateVoxel(voxel, 1.0);
+    
+      this->result_.at(this->dict_.getIndex("population"))->UpdateVoxel(voxel, 1.0);
     if (!this->use_com_) {
       this->resultV_.at(this->dict_.getIndex(this->centerSolventAtom_) - this->result_.size()).at(voxel) += 1.0;
     }
@@ -1244,7 +1275,7 @@ int Action_GIGist::bin(int begin, int end, Vec3 vec, ActionFrame frame) {
  * @param frame: The current frame.
  * @return Nothing at the moment
  */
-void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame) {
+void Action_GIGist::calcDipole(int begin, int end, int voxel, const ActionFrame &frame) {
   #if !defined _OPENMP && !defined CUDA
     this->tDipole_.Start();
 #endif
@@ -1275,6 +1306,66 @@ void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame)
 #endif
 }
 
+std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const double * molAtomCoords)
+{
+  std::vector<int> indices;
+  Vec3 com = this->calcCenterOfMass( begin, end, molAtomCoords );
+  int i = 0;
+  Vec3 X;
+
+  for (int i {begin}; i < end; i+=3)
+  {
+    Vec3 coord{molAtomCoords[i]};
+    if ( (coord - com).Length() > 0.2)
+    {
+      // Return if enough atoms are found
+      if (indices.size() >= 2)
+      {
+        return indices;
+      }
+      else if (indices.size() == 0)
+      {
+        indices.push_back(i);
+	      X = coord - com;
+      }
+      else
+      {
+        if (X * (coord - com) <= 0.9)
+	      {
+          indices.push_back(i);
+	        return indices;
+	      }
+      }
+    }
+    i++;
+  }
+  return indices;
+}
+
+
+Quaternion<DOUBLE_O_FLOAT> calcQuaternion(const std::vector<Vec3> &molAtomCoords, const Vec3 &center, std::vector<int> indices)
+{
+  Vec3 X{};
+  Vec3 Y{};
+
+  if (molAtomCoords.size() < indices.at(0) || molAtomCoords.size() < indices.at(1))
+  {
+    return Quaternion<DOUBLE_O_FLOAT> {};
+  }
+
+  X = molAtomCoords.at(indices.at(0)) - center;
+  Y = molAtomCoords.at(indices.at(1)) - center;
+
+  // Create Quaternion for the rotation from the new coordintate system to the lab coordinate system.
+   Quaternion<DOUBLE_O_FLOAT> quat(X, Y);
+   // The Quaternion would create the rotation of the lab coordinate system onto the
+   // calculated solvent coordinate system. The invers quaternion is exactly the rotation of
+   // the solvent coordinate system onto the lab coordinate system.
+   quat.invert();
+   return quat;
+}
+
+
 /**
  * Calculate the quaternion as a rotation when a certain center is given
  * and a set of atomic coordinates are supplied. If the center coordinates
@@ -1291,7 +1382,7 @@ void Action_GIGist::calcDipole(int begin, int end, int voxel, ActionFrame frame)
  * @return: A quaternion holding the rotational value.
  * FIXME: Decision for the different X and Y coordinates has to be done at the beginning.
  */
-Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> &molAtomCoords, Vec3 &center, int headAtomIndex) {
+Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(const std::vector<Vec3> &molAtomCoords, const Vec3 &center, int headAtomIndex) {
   Vec3 X{};
   Vec3 Y{};
   bool setX{false};
@@ -1303,11 +1394,6 @@ Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> &molA
                   molAtomCoords.at(i)[1] - center[1], 
                   molAtomCoords.at(i)[2] - center[2]);
         Y.Normalize();
-        // Check if the two vectors are parallel.
-        // TODO: Check FIXME at the start
-        if( !this->almostEqual(X * Y, 1.0) ) {
-          setY = true;
-        }
         
       }
       if (!setX) {
@@ -1323,6 +1409,11 @@ Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(std::vector<Vec3> &molA
         break;
       }
     }
+  }
+
+  if (X.Length() <= 0.1 || Y.Length() <= 0.1)
+  {
+    return Quaternion<DOUBLE_O_FLOAT>{};
   }
 
    // Create Quaternion for the rotation from the new coordintate system to the lab coordinate system.
