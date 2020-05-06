@@ -229,8 +229,8 @@ private:
   double calcEnergy(double, int, int);
 
   // In: Action_GIGIST.cpp
-  // line: 886
-  double calcDistanceSqrd(ActionFrame&, int, int);
+  // line: 839
+  double calcDistanceSqrd(const ActionFrame&, int, int);
 
   // In: Action_GIGIST.cpp
   // line: 917
@@ -258,17 +258,30 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 1058
-  void writeDxFile(std::string, std::vector<double> &);
+  void writeDxFile(std::string, const std::vector<double> &);
 
+  // In: Action_GIGIST.cpp
+  // line: 
   Vec3 calcCenterOfMass(int atom_begin, int atom_end, const double *coordinates);
 
-  int bin(int begin, int end, Vec3 vec, ActionFrame frame);
+  // In: Action_GIGIST.cpp
+  // line: 
+  int bin(int begin, int end, const Vec3 &vec, const ActionFrame &frame);
 
-  void calcDipole(int begin, int end, int voxel, ActionFrame frame);
+  // In: Action_GIGIST.cpp
+  // line: 
+  void calcDipole(int begin, int end, int voxel, const ActionFrame &frame);
 
-  Quaternion<DOUBLE_O_FLOAT> calcQuaternion(std::vector<Vec3> &molAtomCoords, Vec3 &center, int headAtomIndex);
+  // In: Action_GIGIST.cpp
+  // line: 
+  Quaternion<DOUBLE_O_FLOAT> calcQuaternion(const std::vector<Vec3> &molAtomCoords, const Vec3 &center, int headAtomIndex=-1);
+  Quaternion<DOUBLE_O_FLOAT> calcQuaternion(const std::vector<Vec3> &molAtomCoords, const Vec3 &center, std::vector<int> indices);
 
+  // In: Action_GIGIST.cpp
+  // line: 
   bool almostEqual(double input, double control);
+
+  std::vector<int> calcQuaternionIndices(int atom_begin, int atom_end, const double *coordinates);
 
 
   // Functions defined for FEBISS implementation
