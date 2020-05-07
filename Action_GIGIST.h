@@ -413,6 +413,8 @@ private:
   std::vector<int> atomTypes_;
   std::vector<double> masses_;
 
+  std::vector<int> quat_indices_;
+
   // Is a usual array, as std::vector<bool> is actually not a vector storing boolean
   // values but a bit string with the boolean values encoded at each position.
   bool *solvent_;
