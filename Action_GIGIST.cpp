@@ -320,16 +320,16 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
   std::vector<DOUBLE_O_FLOAT> eww_result(this->numberAtoms_);
   std::vector<DOUBLE_O_FLOAT> esw_result(this->numberAtoms_);
   std::vector<std::vector<int> > order_indices{};
-  std::vector<int> quat_indices{};
+  
 
   if (placeWaterMolecules_ && this->nFrames_ == 1)
     this->writeOutSolute(frame);
-  if (this->use_com_ && this->nFrames_ == 0) 
+  if (this->use_com_ && this->nFrames_ == 1) 
   {
     for (Topology::mol_iterator mol = this->top_->MolStart(); mol < this->top_->MolEnd(); ++mol) {
       if ((mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( this->top_->operator[](mol->BeginAtom()).MolNum() >= this->forceStart_ ))) 
       {
-	      quat_indices = this->calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().xAddress());
+	      quat_indices_ = this->calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().xAddress());
         break;
       }
     }
@@ -527,10 +527,10 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           quat = this->calcQuaternion(molAtomCoords, molAtomCoords.at(headAtomIndex), headAtomIndex);
         } else {
           // -1 Will never evaluate to true, so in the funciton it will have no consequence.
-          quat = this->calcQuaternion(molAtomCoords, com, quat_indices);
+          quat = this->calcQuaternion(molAtomCoords, com, quat_indices_);
         }
-        if (quat.initialized())
-        {
+        //if (quat.initialized())
+        //{
           #ifdef _OPENMP
           #pragma omp critical
           {
@@ -539,7 +539,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           #ifdef _OPENMP
           }
           #endif
-        }
+        //}
         
 
         #if !defined _OPENMP && !defined CUDA
@@ -1014,9 +1014,13 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
         continue;
       }
 
-      double rR{ this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1)) };
-      if ( (rR < NNr) && (rR > 0.0) ) {
-        NNr = rR;
+     if ( this->quaternions_.at(voxel).at(n0).initialized() &&
+		      this->quaternions_.at(voxel).at(n1).initialized() )
+     {
+      	double rR{ this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1)) };
+      	if ( (rR < NNr) && (rR > 0.0) ) {
+        	NNr = rR;
+      	}
       }
     }
     if (NNr < 99999 && NNr > 0) {
@@ -1061,10 +1065,14 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       if (dd > 0 && dd < NNd) {
         NNd = dd;
       }
-      double rR{ this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1)) };
-      double ds{ rR * rR + dd };
-      if (ds < NNs && ds > 0) {
-        NNs = ds;
+      if ( this->quaternions_.at(voxel).at(n0).initialized() &&
+		      this->quaternions_.at(voxel).at(n1).initialized() )
+      {
+      	double rR{ this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1)) };
+      	double ds{ rR * rR + dd };
+      	if (ds < NNs && ds > 0) {
+        	NNs = ds;
+      	}
       }
     }
     // Get the values for the dimensions
@@ -1310,9 +1318,8 @@ void Action_GIGist::calcDipole(int begin, int end, int voxel, const ActionFrame 
 std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const double * molAtomCoords)
 {
   std::vector<int> indices;
-  Vec3 com = this->calcCenterOfMass( begin, end, molAtomCoords );
-  int i = 0;
-  Vec3 X;
+  Vec3 com {this->calcCenterOfMass( begin, end, molAtomCoords )};
+  Vec3 X{ 0, 0, 0};
 
   for (int i {begin}; i < end; i+=3)
   {
@@ -1338,24 +1345,21 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
 	      }
       }
     }
-    i++;
   }
   return indices;
 }
 
 
-Quaternion<DOUBLE_O_FLOAT> calcQuaternion(const std::vector<Vec3> &molAtomCoords, const Vec3 &center, std::vector<int> indices)
+Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(const std::vector<Vec3> &molAtomCoords, const Vec3 &center, std::vector<int> indices)
 {
-  Vec3 X{};
-  Vec3 Y{};
-
-  if (molAtomCoords.size() < indices.at(0) || molAtomCoords.size() < indices.at(1))
+  if (static_cast<int>(molAtomCoords.size()) < indices.at(0) || 
+          static_cast<int>(molAtomCoords.size()) < indices.at(1))
   {
     return Quaternion<DOUBLE_O_FLOAT> {};
   }
 
-  X = molAtomCoords.at(indices.at(0)) - center;
-  Y = molAtomCoords.at(indices.at(1)) - center;
+  Vec3 X = molAtomCoords.at(indices.at(0)) - center;
+  Vec3 Y = molAtomCoords.at(indices.at(1)) - center;
 
   // Create Quaternion for the rotation from the new coordintate system to the lab coordinate system.
    Quaternion<DOUBLE_O_FLOAT> quat(X, Y);
