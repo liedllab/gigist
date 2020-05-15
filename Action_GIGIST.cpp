@@ -328,7 +328,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
     for (Topology::mol_iterator mol = this->top_->MolStart(); mol < this->top_->MolEnd(); ++mol) {
       if ((mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( this->top_->operator[](mol->BeginAtom()).MolNum() >= this->forceStart_ ))) 
       {
-	      quat_indices_ = this->calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().xAddress());
+	      quat_indices_ = this->calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().XYZ(mol->BeginAtom()));
         break;
       }
     }
@@ -1061,7 +1061,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
         continue;
       }
       double dd{ (this->waterCoordinates_.at(voxel).at(n0) - this->waterCoordinates_.at(voxel).at(n1)).Magnitude2() };
-      if (dd > 0 && dd < NNd) {
+      if (dd > Constants::SMALL && dd < NNd) {
         NNd = dd;
       }
       if ( this->quaternions_.at(voxel).at(n0).initialized() &&
@@ -1069,7 +1069,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       {
       	double rR{ this->quaternions_.at(voxel).at(n0).distance(this->quaternions_.at(voxel).at(n1)) };
       	double ds{ rR * rR + dd };
-      	if (ds < NNs && ds > 0) {
+      	if (ds < NNs && ds > Constants::SMALL) {
         	NNs = ds;
       	}
       }
@@ -1106,7 +1106,6 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       ret.at(3) = 0;
       return ret;
     }
-    
     if (NNd < 3 && NNd > 0) {
       // For both, the number of frames is used as the number of measurements.
       // The third power of NNd has to be taken, since NNd is only power 1.
@@ -1150,10 +1149,14 @@ void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double 
     if (dd > Constants::SMALL && dd < NNd) {
       NNd = dd;
     }
-    double rR{ this->quaternions_.at(voxel1).at(n0).distance(this->quaternions_.at(voxel2).at(n1)) };
-    double ds{ rR * rR + dd };
-    if (ds < NNs && ds > 0) {
-      NNs = ds;
+    if (this->quaternions_.at(voxel1).at(n0).initialized() &&
+		    this->quaternions_.at(voxel2).at(n1).initialized())
+    {
+      double rR{ this->quaternions_.at(voxel1).at(n0).distance(this->quaternions_.at(voxel2).at(n1)) };
+      double ds{ rR * rR + dd };
+      if (ds < NNs && ds > 0) {
+        NNs = ds;
+      }
     }
   }
 } 
@@ -1319,10 +1322,9 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
   std::vector<int> indices;
   Vec3 com {this->calcCenterOfMass( begin, end, molAtomCoords )};
   Vec3 X{ 0, 0, 0};
-
-  for (int i {begin}; i < end; i+=3)
+  for (int i {0}; i < (end - begin); i++)
   {
-    Vec3 coord{molAtomCoords[i]};
+    Vec3 coord{&molAtomCoords[i * 3]};
     if ( (coord - com).Length() > 0.2)
     {
       // Return if enough atoms are found
@@ -1333,15 +1335,15 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
       else if (indices.size() == 0)
       {
         indices.push_back(i);
-	      X = coord - com;
+        X = coord - com;
       }
       else
       {
-        if (X * (coord - com) <= 0.9)
-	      {
+        if ( (X * (coord - com)) / (X.Length() * (coord - com).Length()) <= 0.9)
+        {
           indices.push_back(i);
-	        return indices;
-	      }
+          return indices;
+        }
       }
     }
   }
@@ -1354,6 +1356,7 @@ Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(const std::vector<Vec3>
   if (static_cast<int>(molAtomCoords.size()) < indices.at(0) || 
           static_cast<int>(molAtomCoords.size()) < indices.at(1))
   {
+	  std::cout << "Something went wrong: " << indices.at(0) << " " << indices.at(1) << "     " << molAtomCoords.size() << "\n";
     return Quaternion<DOUBLE_O_FLOAT> {};
   }
 
