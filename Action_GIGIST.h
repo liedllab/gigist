@@ -28,7 +28,8 @@
 #include <stdlib.h>
 #include <string>
 #include <fstream>
-
+#include <map>
+#include <memory>
 
 #include "Action.h"
 #include "Vec3.h"
@@ -198,23 +199,23 @@ private:
 
   // Is called as an initializer of the object
   // In: Action_GIGIST.cpp
-  // line: 71
+  // line: 85
   Action::RetType Init(ArgList&, ActionInit&, int);
 
   // Is called to setup the calculation with anything topology
   // specific
   // In: Action_GIGIST.cpp
-  // line: 179
+  // line: 211
   Action::RetType Setup(ActionSetup&);
 
   // Is used to actually perform the action on a single frame
   // In: Action_GIGIST.cpp
-  // line: 276
+  // line: 308
   Action::RetType DoAction(int, ActionFrame&);
 
   // Is used for postprocessing calculations and output
   // In: Action_GIGIST.cpp
-  // line: 633
+  // line: 671
   void Print();
 
 
@@ -222,40 +223,99 @@ private:
   // Functions defined to make the programmers life easier
 
   // In: Action_GIGIST.cpp
-  // line: 827
+  // line: 874
   double calcEnergy(double, int, int);
 
   // In: Action_GIGIST.cpp
-  // line: 839
+  // line: 886
   double calcDistanceSqrd(ActionFrame&, int, int);
 
   // In: Action_GIGIST.cpp
-  // line: 870
+  // line: 917
   double calcElectrostaticEnergy(double, int, int);
 
   // In: Action_GIGIST.cpp
-  // line: 888
+  // line: 935
   double calcVdWEnergy(double, int, int);
 
   // In: Action_GIGIST.cpp
-  // line: 903
+  // line: 950
   double calcOrientEntropy(int);
 
   // In: Action_GIGIST.cpp
-  // line: 934
+  // line: 981
   std::vector<double> calcTransEntropy(int);
 
   // In: Action_GIGIST.cpp
-  // line: 1017
+  // line: 1064
   void calcTransEntropyDist(int, int, int, double &, double &);
 
   // In: Action_GIGIST.cpp
-  // line: 1035
+  // line: 1082
   int weight(std::string);
 
   // In: Action_GIGIST.cpp
-	// line: 1058
+  // line: 1105
   void writeDxFile(std::string, std::vector<double>);
+
+
+  // Functions defined for FEBISS implementation
+
+  // In: Action_GIGIST.cpp
+  // line: 1183
+  void placeFebissWaters(void);
+
+  // In: Action_GIGIST.cpp
+  // line: 1281
+  void writeOutSolute(ActionFrame&);
+
+  // In: Action_GIGIST.cpp
+  // line: 1311
+  void determineGridShells(void);
+
+  // In: Action_GIGIST.cpp
+  // line: 1351
+  Vec3 coordsFromIndex(const int);
+
+  // In: Action_GIGIST.cpp
+  // line: 1367
+  void setGridToZero(std::vector<std::vector<std::vector<int>>>&, const int) const;
+
+  // In: Action_GIGIST.cpp
+  // line: 1386
+  std::tuple<int, int, int, int> findHMaximum(std::vector<std::vector<std::vector<int>>>&, const int, std::tuple<int, int, int, int> = std::make_tuple(0, 0, 0, 0)) const;
+
+  // In: Action_GIGIST.cpp
+  // line: 1430
+  double calcAngleBetweenHGridPos(const std::tuple<int, int, int, int>&, const std::tuple<int, int, int, int>&) const;
+
+  // In: Action_GIGIST.cpp
+  // line: 1449
+  void deleteAroundFirstH(std::vector<std::vector<std::vector<int>>>&, const int, const std::tuple<int, int, int, int>&) const;
+
+  // In: Action_GIGIST.cpp
+  // line: 1472
+  double calcDistSqBetweenHGridPos(const std::tuple<int, int, int, int>&, const std::tuple<int, int, int, int>&) const;
+
+  // In: Action_GIGIST.cpp
+  // line: 1490
+  Vec3 coordsFromHGridPos(const std::tuple<int, int, int, int>&) const;
+
+  // In: Action_GIGIST.cpp
+  // line: 1510
+  double assignDensityWeightedDeltaG(const int, const int, const double, const double, const std::vector<double>&, const std::vector<double>&);
+
+  // In: Action_GIGIST.cpp
+  // line: 1552
+  double addWaterShell(double&, const std::vector<double>&, const int, const int);
+
+  // In: Action_GIGIST.cpp
+  // line: 1573
+  void subtractWater(std::vector<double> &, const int, const int, const double, const double);
+
+  // In: Action_GIGIST.cpp
+  // line: 1610
+  void writeFebissPdb(const int, const Vec3&, const Vec3&, const Vec3&, const double);
 
 
   // Necessary Variables
@@ -330,13 +390,20 @@ private:
   // Is a usual array, as std::vector<bool> is actually not a vector storing boolean
   // values but a bit string with the boolean values encoded at each position.
   bool *solvent_;
-  
+  // FEBISS related variables
+  bool placeWaterMolecules_ = false;
+  int nSoluteAtoms_ = 0;
+
   std::vector<std::vector<Vec3> > waterCoordinates_;
+  std::vector<std::vector<Vec3>> hVectors_;
+  std::map<double, std::vector<int>> shellcontainer_;
+  std::vector<double> shellcontainerKeys_;
   DataDictionary dict_;
 
   CpptrajFile *datafile_;
   CpptrajFile *dxfile_;
-  
+  CpptrajFile *febissWaterfile_;
+
   std::vector<int> solventAtomCounter_;
   bool writeDx_;
   bool doorder_;
