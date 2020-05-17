@@ -51,7 +51,8 @@ void Action_GIGist::Help() const {
           "    <temp 300>                 Defines the temperature of the simulation.\n"
           "    <gridspacn 0.5>            Defines the grid spacing\n"
           "    <refdens 0.0329>           Defines the reference density for the water model.\n"
-          "    <out \"out.dat\">            Defines the name of the output file.\n" 
+          "    febiss                     Activates FEBISS placement (only for water)\n"
+          "    <out \"out.dat\">            Defines the name of the output file.\n"
           "    <dx>                       Set to write out dx files. Population is always written.\n"
 
           "  The griddimensions must be set in integer values and have to be larger than 0.\n"
@@ -128,8 +129,10 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
     this->center_.SetVec(0, 0, 0);
   }
 
-
-
+  if (argList.hasKey("febiss")) {
+    placeWaterMolecules_ = true;
+    this->febissWaterfile_ = actionInit.DFL().AddCpptrajFile( "febiss-waters.pdb", "GIST output");
+  }
 
   if (argList.hasKey("dx")) {
     this->writeDx_ = true;
@@ -158,6 +161,8 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
   this->nVoxels_ = (unsigned int)this->dimensions_[0] * (unsigned int)this->dimensions_[1] * (unsigned int)this->dimensions_[2];
   this->quaternions_.resize(this->nVoxels_);
   this->waterCoordinates_.resize(this->nVoxels_);
+  if (placeWaterMolecules_)
+    this->hVectors_.resize(this->nVoxels_);
 
   std::string dsname = actionInit.DSL().GenerateDefaultName("GIST");
   this->result_ = std::vector<DataSet_3D *>(this->dict_.size());
@@ -306,6 +311,8 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
   std::vector<DOUBLE_O_FLOAT> esw_result(this->numberAtoms_);
   std::vector<std::vector<int> > order_indices;
 
+  if (placeWaterMolecules_ && this->nFrames_ == 1)
+    this->writeOutSolute(frame);
 
   // CUDA necessary information
   #ifdef CUDA
@@ -394,7 +401,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       
     
       int headAtomIndex = -1;
-      // Keep voxel at -1 if it is not possible to put iy on the grid
+      // Keep voxel at -1 if it is not possible to put it on the grid
       int voxel = -1;
       std::vector<Vec3> molAtomCoords;
       #if !defined _OPENMP && !defined CUDA
@@ -473,6 +480,8 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
               Y.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
                         molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
                         molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
+              if (placeWaterMolecules_)
+                this->hVectors_.at(voxel).push_back(Vec3(Y[0], Y[1], Y[2]));
               Y.Normalize();
               setY = true;
             }
@@ -480,6 +489,8 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
               X.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
                         molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
                         molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
+              if (placeWaterMolecules_)
+                this->hVectors_.at(voxel).push_back(Vec3(X[0], X[1], X[2]));
               X.Normalize();
               setX = true;
             }
@@ -490,7 +501,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         }
 
         
-        // Create Quaternion for the rotation from the new coordintate system to the lab coordinate system.
+        // Create Quaternion for the rotation from the new coordinate system to the lab coordinate system.
         Quaternion<DOUBLE_O_FLOAT> quat(X, Y);
         // The Quaternion would create the rotation of the lab coordinate system onto the
         // calculated solvent coordinate system. The invers quaternion is exactly the rotation of
@@ -752,6 +763,13 @@ void Action_GIGist::Print() {
     }
   }
 
+  if (placeWaterMolecules_) {
+    if (this->centerSolventAtom_ == "O" && this->solventAtomCounter_.size() == 2)
+      this->placeFebissWaters();
+    else
+      mprinterr("Error: FEBISS only works with water as solvent so far.\n");
+  }
+
   
   mprintf("Writing output:\n");
   this->datafile_->Printf("GIST calculation output.\n");
@@ -828,6 +846,8 @@ void Action_GIGist::Print() {
       this->writeDxFile("g_" + this->dict_.getElement(this->result_.size() + i) + ".dx", this->resultV_.at(i));
     }
   }
+
+
   mprintf("Timings:\n"
           " Find Head Atom:   %8.3f\n"
           " Add up Energy:    %8.3f\n"
@@ -1154,6 +1174,444 @@ void Action_GIGist::copyToGPU(void) {
     throw e;
   }
 }
-
-
 #endif
+
+/**
+ * @brief main function for FEBISS placement
+ *
+ */
+void Action_GIGist::placeFebissWaters(void) {
+  mprintf("Transfering data for FEBISS placement\n");
+  this->determineGridShells();
+  /* calculate delta G and read density data */
+  std::vector<double> deltaG;
+  std::vector<double> relPop;
+  for (unsigned int voxel = 0; voxel < this->nVoxels_; ++voxel) {
+    double dTSt = this->result_.at(this->dict_.getIndex("dTStrans_norm"))->operator[](voxel);
+    double dTSo = this->result_.at(this->dict_.getIndex("dTSorient_norm"))->operator[](voxel);
+    double esw = this->result_.at(this->dict_.getIndex("Esw_norm"))->operator[](voxel);
+    double eww = this->result_.at(this->dict_.getIndex("Eww_norm"))->operator[](voxel);
+    double value = esw + eww - dTSo - dTSt;
+    deltaG.push_back(value);
+    relPop.push_back(this->resultV_.at(this->centerSolventIdx_).at(voxel));
+  }
+  /* Place water to recover 95% of the original density */
+  int waterToPosition = static_cast<int>(round(this->numberSolvent_ * 0.95 / 3));
+  mprintf("Placing %d FEBISS waters\n", waterToPosition);
+  ProgressBar progBarFebiss(waterToPosition);
+  /* cycle to position all waters */
+  for (int i = 0; i < waterToPosition; ++i) {
+    progBarFebiss.Update(i);
+    double densityValueOld = 0.0;
+    /* get data of current highest density voxel */
+    std::vector<double>::iterator maxDensityIterator;
+    maxDensityIterator = std::max_element(relPop.begin(), relPop.end());
+    double densityValue = *(maxDensityIterator);
+    int index = maxDensityIterator - relPop.begin();
+    Vec3 voxelCoords = this->coordsFromIndex(index);
+    /**
+     * bin hvectors to grid
+     * Currently this grid is hardcoded. It has 21 voxels in x,y,z direction.
+     * The spacing is 0.1 A, so it stretches out exactly 1A in each direction
+     * and is centered on the placed oxygen. This grid allows for convenient and
+     * fast binning of the relative vectors of the H atoms during the simulation
+     * which have been stored in this->hVectors_ as a vector of Vec3
+     */
+    std::vector<std::vector<std::vector<int>>> hGrid;
+    int hDim = 21;
+    this->setGridToZero(hGrid, hDim);
+    std::vector<int> binnedHContainer;
+    /* cycle relative H vectors */
+    for (unsigned int j = 0; j < this->hVectors_[index].size(); ++j) {
+      /* cycle x, y, z */
+      for (int k = 0; k < 3; ++k) {
+        double tmpBin = this->hVectors_[index][j][k];
+        tmpBin *= 10;
+        tmpBin = std::round(tmpBin);
+        tmpBin += 10;
+        /* sometimes bond lengths can be longer than 1 A and exactly along the
+         * basis vectors, this ensures that the bin is inside the grid */
+        if (tmpBin < 0)
+          tmpBin = 0;
+        else if (tmpBin > 20)
+          tmpBin = 20;
+        binnedHContainer.push_back(static_cast<int>(tmpBin));
+      }
+    }
+    /* insert data into grid */
+    for (unsigned int j = 0; j < binnedHContainer.size(); j += 3) {
+      int x = binnedHContainer[j];
+      int y = binnedHContainer[j + 1];
+      int z = binnedHContainer[j + 2];
+      hGrid[x][y][z] += 1;
+    }
+    /* determine maxima in grid */
+    auto maximum1 = this->findHMaximum(hGrid, hDim);
+    this->deleteAroundFirstH(hGrid, hDim, maximum1);
+    auto maximum2 = this->findHMaximum(hGrid, hDim, maximum1);
+    Vec3 h1 = this->coordsFromHGridPos(maximum1);
+    Vec3 h2 = this->coordsFromHGridPos(maximum2);
+    /* increase included shells until enough density to subtract */
+    int shellNum = 0;
+    int maxShellNum = this->shellcontainerKeys_.size() - 1;
+    /* not enough density and not reached limit */
+    while (densityValue < 1 / (this->voxelVolume_ * this->rho0_) &&
+           shellNum < maxShellNum) {
+      densityValueOld = densityValue;
+      ++shellNum;
+      /* new density by having additional watershell */
+      densityValue = this->addWaterShell(densityValue, relPop, index, shellNum);
+    }
+    /* determine density weighted delta G with now reached density */
+    double weightedDeltaG = assignDensityWeightedDeltaG(
+        index, shellNum, densityValue, densityValueOld, relPop, deltaG);
+    int atomNumber = 3 * i + this->nSoluteAtoms_; // running index in pdb file
+    /* write new water to pdb */
+    this->writeFebissPdb(atomNumber, voxelCoords, h1, h2, weightedDeltaG);
+    /* subtract density in included shells */
+    this->subtractWater(relPop, index, shellNum, densityValue, densityValueOld);
+  } // cycle of placed water molecules
+}
+
+/**
+ * @brief writes solute of given frame into pdb
+ *
+ * @argument actionFrame frame from which solute is written
+ */
+void Action_GIGist::writeOutSolute(ActionFrame& frame) {
+  std::vector<Vec3> soluteCoords;
+  std::vector<std::string> soluteEle;
+  for (Topology::mol_iterator mol = this->top_->MolStart();
+       mol < this->top_->MolEnd(); ++mol) {
+    if (!mol->IsSolvent()) {
+      for (int atom = mol->BeginAtom(); atom < mol->EndAtom(); ++atom) {
+        this->nSoluteAtoms_++;
+        const double *vec = frame.Frm().XYZ(atom);
+        soluteCoords.push_back(Vec3(vec));
+        soluteEle.push_back(this->top_->operator[](atom).ElementName());
+      }
+    }
+  }
+  for (unsigned int i = 0; i < soluteCoords.size(); ++i) {
+    auto name = soluteEle[i].c_str();
+    this->febissWaterfile_->Printf("ATOM  %5d  %3s SOL     1    %8.3f%8.3f%8.3f%6.2f%7.2f          %2s\n", i+1, name, soluteCoords[i][0], soluteCoords[i][1], soluteCoords[i][2], 1.00, 0.0, name);
+  }
+}
+
+/**
+ * @brief calculates distance of all voxels to the grid center and groups
+ *        them intp shells of identical distances
+ *
+ * a map stores lists of indices with their identical squared distance as key
+ * the indices are stores as difference to the center index to be applicable for
+ * all voxels later without knowing the center index
+ * a list contains all keys in ascending order to systematically grow included
+ * shells later in the algorithm
+ */
+void Action_GIGist::determineGridShells(void) {
+  /* determine center index */
+  size_t centeri, centerj, centerk;
+  this->result_.at(this->dict_.getIndex("population"))->
+      Bin().Calc(center_[0], center_[1], center_[2], centeri, centerj, centerk);
+  int centerIndex = this->result_.at(this->dict_.getIndex("population"))
+      ->CalcIndex(centeri, centerj, centerk);
+  for (unsigned int vox = 0; vox < nVoxels_; ++vox) {
+    /* determine squared distance */
+    Vec3 coords = this->coordsFromIndex(vox);
+    Vec3 difference = coords - this->center_;
+    double distSquared = difference[0] * difference[0] +
+                         difference[1] * difference[1] +
+                         difference[2] * difference[2];
+    /* find function of map returns last memory address of map if not found */
+    /* if is entered if distance already present as key in map -> can be added */
+    if (this->shellcontainer_.find(distSquared) != this->shellcontainer_.end())
+      this->shellcontainer_[distSquared].push_back(vox-centerIndex);
+    else {
+      /* create new entry in map */
+      std::vector<int> indexDifference;
+      indexDifference.push_back(vox-centerIndex);
+      this->shellcontainer_.insert(std::make_pair(distSquared, indexDifference));
+    }
+  }
+  /* create list to store ascending keys */
+  this->shellcontainerKeys_.reserve(this->shellcontainer_.size());
+  std::map<double, std::vector<int>>::iterator it = this->shellcontainer_.begin();
+  while(it != this->shellcontainer_.end()) {
+    this->shellcontainerKeys_.push_back(it->first);
+    it++;
+  }
+}
+
+/**
+ * @brief own utility function to get coords from grid index
+ *
+ * @argument index The index in the GIST grid
+ * @return Vec3 coords at the voxel
+ */
+Vec3 Action_GIGist::coordsFromIndex(const int index) {
+  size_t i, j, k;
+  this->result_.at(this->dict_.getIndex("population"))->ReverseIndex(index, i, j, k);
+  Vec3 coords = gridStart_;
+  coords[0] += i * this->voxelSize_;
+  coords[1] += j * this->voxelSize_;
+  coords[2] += k * this->voxelSize_;
+  return coords;
+}
+
+/**
+ * @brief sets the grid for the H atoms to zero
+ *
+ * @argument grid
+ * @argument dim The dimension of the grid
+ */
+void Action_GIGist::setGridToZero(std::vector<std::vector<std::vector<int>>>& grid, const int dim) const {
+  grid.resize(dim);
+  for (int i = 0; i < dim; ++i) {
+    grid[i].resize(dim);
+    for (int j = 0; j < dim; ++j) {
+      grid[i][j].resize(dim);
+    }
+  }
+}
+
+/**
+ * @brief Find highest value with possible consideration of first maximum
+ *
+ * @argument grid
+ * @argument dim The dimension of the grid
+ * @argument firstMaximum Optional first maximum
+ *
+ * @return std::tuple<int, int, int, int> maximum in the grid
+ */
+std::tuple<int, int, int, int> Action_GIGist::findHMaximum(std::vector<std::vector<std::vector<int>>>& grid, const int dim, std::tuple<int, int, int, int> firstMaximum) const {
+  std::tuple<int, int, int, int> maximum = std::make_tuple(0, 0, 0, 0);
+  /* default for firstMaximum is 0,
+   * so this bool is False is no firstMaximum is given */
+  bool considerOtherMaximum = std::get<0>(firstMaximum) != 0;
+  /* TODO get from applied water model in simulation */
+  double idealAngle = 104.57;
+  for (int i = 0; i < dim; ++i) {
+    for (int j = 0; j < dim; ++j) {
+      for (int k = 0; k < dim; ++k) {
+        /* if bigger value check if angle in range if firstMaximum is given */
+        if (grid[i][j][k] > std::get<0>(maximum)) {
+          auto possibleMaximum = std::make_tuple(grid[i][j][k], i, j, k);
+          if (considerOtherMaximum) {
+            double angle = this->calcAngleBetweenHGridPos(possibleMaximum, firstMaximum);
+            if (idealAngle-5 < angle && angle < idealAngle+5) {
+              maximum = possibleMaximum;
+            }
+          }
+          else
+            maximum = possibleMaximum;
+        }
+        /* if equal and already firstMaximum, take better angle */
+        else if (considerOtherMaximum && grid[i][j][k] == std::get<0>(maximum)) {
+          double angle = this->calcAngleBetweenHGridPos(maximum, firstMaximum);
+          auto possibleMaximum = std::make_tuple(grid[i][j][k], i, j, k);
+          double newAngle = this->calcAngleBetweenHGridPos(possibleMaximum, firstMaximum);
+          if (std::fabs(newAngle - idealAngle) < std::fabs(angle - idealAngle))
+            maximum = possibleMaximum;
+        }
+      }
+    }
+  }
+  return maximum;
+}
+
+/**
+ * @brief calculate angle in degrees between two hGrid points
+ *
+ * @argument a Point in the grid
+ * @argument b Point in the grid
+ *
+ * @return double angle in degrees
+ */
+double Action_GIGist::calcAngleBetweenHGridPos(const std::tuple<int, int, int, int>& a, const std::tuple<int, int, int, int>& b) const {
+  double xa = (std::get<1>(a) - 10) * 0.1;
+  double ya = (std::get<2>(a) - 10) * 0.1;
+  double za = (std::get<3>(a) - 10) * 0.1;
+  double xb = (std::get<1>(b) - 10) * 0.1;
+  double yb = (std::get<2>(b) - 10) * 0.1;
+  double zb = (std::get<3>(b) - 10) * 0.1;
+  double dotProduct = (xa * xb + ya * yb + za * zb) / std::sqrt( (xa * xa + ya * ya + za * za) * (xb * xb + yb * yb + zb * zb) );
+  double angle =  180 * acos(dotProduct) / Constants::PI;
+  return angle;
+}
+
+/**
+ * @brief sets hGrid points within 0.5 A of given maximum to 0
+ *
+ * @argument grid The grid storing the values
+ * @argument dim The dimension of the grid
+ * @argument maximum The point around which points will be deleted
+ */
+void Action_GIGist::deleteAroundFirstH(std::vector<std::vector<std::vector<int>>>& grid, const int dim, const std::tuple<int, int, int, int>& maximum) const {
+  double destroyDistance = 0.5;
+  double destroyDistanceSq = destroyDistance * destroyDistance;
+  for (int i = 0; i < dim; ++i) {
+    for (int j = 0; j < dim; ++j) {
+      for (int k = 0; k < dim; ++k) {
+        std::tuple<int, int, int, int> position = std::make_tuple(0, i, j, k);
+        double distance = this->calcDistSqBetweenHGridPos(position, maximum);
+        if (distance <= destroyDistanceSq)
+          grid[i][j][k] = 0;
+      }
+    }
+  }
+}
+
+/**
+ * @brief calculate squared distance between two hGrid points
+ *
+ * @argument a Point in the grid
+ * @argument b Point in the grid
+ *
+ * @return double squared distance
+ */
+double Action_GIGist::calcDistSqBetweenHGridPos(const std::tuple<int, int, int, int>& a, const std::tuple<int, int, int, int>& b) const {
+  double xa = (std::get<1>(a) - 10) * 0.1;
+  double ya = (std::get<2>(a) - 10) * 0.1;
+  double za = (std::get<3>(a) - 10) * 0.1;
+  double xb = (std::get<1>(b) - 10) * 0.1;
+  double yb = (std::get<2>(b) - 10) * 0.1;
+  double zb = (std::get<3>(b) - 10) * 0.1;
+  double distance = (xa - xb) * (xa - xb) + (ya - yb) * (ya - yb) + (za - zb) * (za - zb);
+  return distance;
+}
+
+/**
+ * @brief gives cartesian coordinates of point in hGrid
+ *
+ * @argument pos Point in grid
+ *
+ * @return Vec3 coordinates of the point
+ */
+Vec3 Action_GIGist::coordsFromHGridPos(const std::tuple<int, int, int, int>& pos) const {
+  double x = (std::get<1>(pos) - 10) * 0.1;
+  double y = (std::get<2>(pos) - 10) * 0.1;
+  double z = (std::get<3>(pos) - 10) * 0.1;
+  return Vec3(x, y, z);
+}
+
+/**
+ * @brief weights Delta G of GIST with the water density that was subtracted
+ *        to place the water molecule
+ *
+ * @argument index The index where the oxygen is placed
+ * @argument shellNum The number of shells around the placed oxygen to add to the density
+ * @argument densityValue The value after the last shell was added
+ * @argument densityValueOld The value before the last shell was added
+ * @argument relPop The list of the population values
+ * @argument deltaG The list of all DeltaG values
+ *
+ * @return double density weighted Delta G
+ */
+double Action_GIGist::assignDensityWeightedDeltaG(const int index, const int shellNum, const double densityValue, const double densityValueOld, const std::vector<double>& relPop, const std::vector<double>& deltaG) {
+  double value = 0.0; // value to be returned
+  /* cycle through all shells but the last one */
+  for (int i = 0; i < shellNum; ++i) {
+    /* current shell */
+    auto shell = std::make_shared<std::vector<int>>(
+        this->shellcontainer_[this->shellcontainerKeys_[i]]);
+    /* cycle through current shell */
+    for (unsigned int j = 0; j < (*shell).size(); ++j) {
+      /* get index and check if inside the grid */
+      int tmpIndex = index + (*shell)[j];
+      if (0 < tmpIndex && tmpIndex < static_cast<int>(this->nVoxels_))
+        /* add density weighted delta G to value */
+        value += relPop[tmpIndex] * deltaG[tmpIndex];
+    }
+  }
+  double last_shell = densityValue - densityValueOld; // density of last shell
+  /* Get percentage of how much of the last shell shall be accounted for */
+  double percentage = 1.0;
+  if (last_shell != 0.0)
+    percentage -= (densityValue - 1 / (this->voxelVolume_ * this->rho0_)) / last_shell;
+  /* identical to above but only last shell and percentage */
+  auto outerShell = std::make_shared<std::vector<int>>(
+      this->shellcontainer_[this->shellcontainerKeys_[shellNum]]);
+  for (unsigned int i = 0; i < (*outerShell).size(); ++i) {
+    int tmpIndex = index + (*outerShell)[i];
+    if (0 < tmpIndex && tmpIndex < static_cast<int>(this->nVoxels_))
+      value += percentage * relPop[tmpIndex] * deltaG[tmpIndex];
+  }
+  return value * this->voxelVolume_ * this->rho0_;
+}
+
+/**
+ * @brief adds density of additional water shell to the densityValue
+ *
+ * @argument densityValue The value after the last shell was added
+ * @argument relPop The list of the population values
+ * @argument index The index of the GIST grid where the oxygen will be placed
+ * @argument shellNum The number of the new shells to be added
+ *
+ * @return double density value with the new water shell
+ */
+double Action_GIGist::addWaterShell(double& densityValue, const std::vector<double>& relPop, const int index, const int shellNum) {
+  /* get shell from map */
+  auto newShell = std::make_shared<std::vector<int>>(
+      this->shellcontainer_[this->shellcontainerKeys_[shellNum]]);
+  for (unsigned int i = 0; i < (*newShell).size(); ++i) {
+    int tmpIndex = index + (*newShell)[i];
+    if (0 < tmpIndex && tmpIndex < static_cast<int>(this->nVoxels_))
+      densityValue += relPop[tmpIndex];
+  }
+  return densityValue;
+}
+
+/**
+ * @brief subtract density from all voxels that belonged to the included shells
+ *
+ * @argument relPop The list of the population values
+ * @argument index The index where the oxygen is placed
+ * @argument shellNum The number of shells around the placed oxygen that were included
+ * @argument densityValue The value after the last shell was added
+ * @argument densityValueOld The value before the last shell was added
+ */
+void Action_GIGist::subtractWater(std::vector<double>& relPop, const int index, const int shellNum, const double densityValue, const double densityValueOld) {
+  /* cycle through all but the last shell */
+  for (int i = 0; i < shellNum; ++i) {
+    auto shell = std::make_shared<std::vector<int>>(
+        this->shellcontainer_[this->shellcontainerKeys_[i]]);
+    for (unsigned int j = 0; j < (*shell).size(); ++j) {
+      int tmpIndex = index + (*shell)[j];
+      if (0 < tmpIndex && tmpIndex < static_cast<int>(this->nVoxels_))
+        /* remove all population from the voxel in the GIST grid */
+        relPop[tmpIndex] = 0.0;
+    }
+  }
+  /* since density of one water is overshot, the density must not be deleted
+   * completely in the last shell, first determine percentage */
+  double last_shell = densityValue - densityValueOld; // density in last shell
+  double percentage = 1.0;
+  if (last_shell != 0.0)
+    percentage -= (densityValue - 1 / (this->voxelVolume_ * this->rho0_)) / last_shell;
+  /* identical to before but only last shell and percentage */
+  auto outerShell = std::make_shared<std::vector<int>>(
+      this->shellcontainer_[this->shellcontainerKeys_[shellNum]]);
+  for (unsigned int i = 0; i < (*outerShell).size(); ++i) {
+    int tmpIndex = index + (*outerShell)[i];
+    if (0 < tmpIndex && tmpIndex < static_cast<int>(this->nVoxels_))
+      relPop[tmpIndex] -= percentage * relPop[tmpIndex];
+  }
+}
+
+/**
+ * @brief writes placed water into pdb
+ *
+ * @argument atomNumber The running index in the pdb file
+ * @argument voxelCoords The coordinates for the oxygen
+ * @argument h1 coordinates of one hydrogen relative to the oxygen
+ * @argument h2 coordinates of the other hydrogen relative to the oxygen
+ * @argument deltaG density weighted Delta G to be included as b-factor
+ */
+void Action_GIGist::writeFebissPdb(const int atomNumber, const Vec3& voxelCoords, const Vec3& h1, const Vec3& h2, const double deltaG) {
+  /* get absolute coordinates of hydrogens */
+  Vec3 h1Coords = h1 + voxelCoords;
+  Vec3 h2Coords = h2 + voxelCoords;
+  this->febissWaterfile_->Printf("HETATM%5d    O FEB     1    %8.3f%8.3f%8.3f%6.2f%7.2f           O  \n", atomNumber+1, voxelCoords[0], voxelCoords[1], voxelCoords[2], 1.00, deltaG);
+  this->febissWaterfile_->Printf("HETATM%5d    H FEB     1    %8.3f%8.3f%8.3f%6.2f%7.2f           H  \n", atomNumber+2, h1Coords[0], h1Coords[1], h1Coords[2], 1.00, deltaG);
+  this->febissWaterfile_->Printf("HETATM%5d    H FEB     1    %8.3f%8.3f%8.3f%6.2f%7.2f           H  \n", atomNumber+3, h2Coords[0], h2Coords[1], h2Coords[2], 1.00, deltaG);
+}
