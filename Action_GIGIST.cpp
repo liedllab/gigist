@@ -40,7 +40,8 @@ datafile_(NULL),
 dxfile_(NULL),
 writeDx_(false),
 doorder_(false),
-use_com_(false)
+use_com_(false),
+wrongNumberOfAtoms_(false)
 {}
 
 /**
@@ -327,7 +328,10 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
   if (this->use_com_ && this->nFrames_ == 1) 
   {
     for (Topology::mol_iterator mol = this->top_->MolStart(); mol < this->top_->MolEnd(); ++mol) {
-      if ((mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( this->top_->operator[](mol->BeginAtom()).MolNum() >= this->forceStart_ ))) 
+      int moleculeLength = mol->EndAtom() - mol->BeginAtom() + 1;
+      if (moleculeLength < 3)
+         continue;
+      if ((mol->IsSolvent() && this->forceStart_ == -1 ) || (( this->forceStart_ > -1 ) && ( this->top_->operator[](mol->BeginAtom()).MolNum() >= this->forceStart_ ))) 
       {
 	      quat_indices_ = this->calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().XYZ(mol->BeginAtom()));
         break;
@@ -911,6 +915,10 @@ void Action_GIGist::Print() {
           this->tDipole_.Total(),
           this->tRot_.Total(),
           this->tEnergy_.Total());
+  if (wrongNumberOfAtoms_)
+  {
+    mprintf("Warning: It seems you are having multiple solvents in your system.");
+  }
   #ifdef CUDA
   this->freeGPUMemory();
   #endif
@@ -1357,7 +1365,7 @@ Quaternion<DOUBLE_O_FLOAT> Action_GIGist::calcQuaternion(const std::vector<Vec3>
   if (static_cast<int>(molAtomCoords.size()) < indices.at(0) || 
           static_cast<int>(molAtomCoords.size()) < indices.at(1))
   {
-	  std::cout << "Something went wrong: " << indices.at(0) << " " << indices.at(1) << "     " << molAtomCoords.size() << "\n";
+    wrongNumberOfAtoms_ = true;
     return Quaternion<DOUBLE_O_FLOAT> {};
   }
 
