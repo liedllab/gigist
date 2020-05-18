@@ -436,6 +436,7 @@ private:
   bool writeDx_;
   bool doorder_;
   bool use_com_;
+  bool wrongNumberOfAtoms_;
 
   Timer tRot_;
   Timer tEadd_;
