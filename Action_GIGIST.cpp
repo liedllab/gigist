@@ -1351,10 +1351,12 @@ void Action_GIGist::determineGridShells(void) {
 Vec3 Action_GIGist::coordsFromIndex(const int index) {
   size_t i, j, k;
   this->result_.at(this->dict_.getIndex("population"))->ReverseIndex(index, i, j, k);
-  Vec3 coords = gridStart_;
-  coords[0] += i * this->voxelSize_;
-  coords[1] += j * this->voxelSize_;
-  coords[2] += k * this->voxelSize_;
+  Vec3 coords = this->gridStart_;
+  /* the + 0.5 * size is necessary because of cpptraj's interprets start as corner of grid */
+  /* and voxel coordinates are given for the center of the voxel -> hence the shift of half spacing */
+  coords[0] += i * this->voxelSize_ + 0.5 * this->voxelSize_;
+  coords[1] += j * this->voxelSize_ + 0.5 * this->voxelSize_;
+  coords[2] += k * this->voxelSize_ + 0.5 * this->voxelSize_;
   return coords;
 }
 
