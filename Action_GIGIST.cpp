@@ -1211,11 +1211,11 @@ void Action_GIGist::placeFebissWaters(void) {
     Vec3 voxelCoords = this->coordsFromIndex(index);
     /**
      * bin hvectors to grid
-     * Currently this grid is hardcoded. It has 21 voxels in x,y,z direction.
-     * The spacing is 0.1 A, so it stretches out exactly 1A in each direction
+     * Currently this grid is hardcoded. It has 21 voxels in x, y, z direction.
+     * The spacing is 0.1 A, so it stretches out exactly 1 A in each direction
      * and is centered on the placed oxygen. This grid allows for convenient and
      * fast binning of the relative vectors of the H atoms during the simulation
-     * which have been stored in this->hVectors_ as a vector of Vec3
+     * which have been stored in this->hVectors_ as a std::vector of Vec3
      */
     std::vector<std::vector<std::vector<int>>> hGrid;
     int hDim = 21;
@@ -1315,10 +1315,13 @@ void Action_GIGist::determineGridShells(void) {
       Bin().Calc(center_[0], center_[1], center_[2], centeri, centerj, centerk);
   int centerIndex = this->result_.at(this->dict_.getIndex("population"))
       ->CalcIndex(centeri, centerj, centerk);
+  /* do not use center_ because it does not align with a voxel but lies between voxels */
+  /* however the first shell must be solely the voxel itself -> use coords from center voxel */
+  Vec3 centerCoords = this->coordsFromIndex(centerIndex);
   for (unsigned int vox = 0; vox < nVoxels_; ++vox) {
     /* determine squared distance */
     Vec3 coords = this->coordsFromIndex(vox);
-    Vec3 difference = coords - this->center_;
+    Vec3 difference = coords - centerCoords;
     double distSquared = difference[0] * difference[0] +
                          difference[1] * difference[1] +
                          difference[2] * difference[2];
