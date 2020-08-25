@@ -389,6 +389,7 @@ private:
   int centerSolventIdx_;
   int headAtomType_;
   double neighbourCut2_;
+  bool energy_;
 
   // Topology Object
   Topology *top_;

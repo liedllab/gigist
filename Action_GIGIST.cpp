@@ -105,6 +105,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
   this->rho0_ = argList.getKeyDouble("refdens", 0.0329);
   this->forceStart_ = argList.getKeyInt("force", -1);
   this->neighbourCut2_ = argList.getKeyDouble("neighbour", 3.5);
+  this->energy_ = !(argList.hasKey("skipE"));
   this->neighbourCut2_ *= this->neighbourCut2_;
   this->nFrames_ = 0;
   this->image_.InitImaging( true );
@@ -337,9 +338,10 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       }
     }
   }
-
+  
   // CUDA necessary information
   #ifdef CUDA
+  if (this->energy_){
   this->tEnergy_.Start();
 
   Matrix_3x3 ucell_m{}, recip_m{};
@@ -405,7 +407,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
   delete[] ucell;
 
   this->tEnergy_.Stop();
-
+  }
   #endif
 
 
@@ -1332,6 +1334,9 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
   Vec3 X{ 0, 0, 0};
   for (int i {0}; i < (end - begin); i++)
   {
+    if (top_->operator[](i).Element() == Atom::HYDROGEN){
+      continue;
+    }
     Vec3 coord{&molAtomCoords[i * 3]};
     if ( (coord - com).Length() > 0.2)
     {
@@ -1351,6 +1356,35 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
         {
           indices.push_back(i);
           return indices;
+        }
+      }
+    }
+  }
+  if (indices.size() < 2) {
+    for (int i {0}; i < (end - begin); i++)
+    {
+      if (top_->operator[](i).Element() == Atom::HYDROGEN){
+        Vec3 coord{&molAtomCoords[i * 3]};
+        if ( (coord - com).Length() > 0.2)
+        {
+          // Return if enough atoms are found
+          if (indices.size() >= 2)
+          {
+            return indices;
+          }
+          else if (indices.size() == 0)
+          {
+            indices.push_back(i);
+            X = coord - com;
+          }
+          else
+          {
+            if ( (X * (coord - com)) / (X.Length() * (coord - com).Length()) <= 0.9)
+            {
+              indices.push_back(i);
+              return indices;
+            }
+          }
         }
       }
     }
