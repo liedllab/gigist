@@ -36,7 +36,7 @@ void Action_GIGist::Help() const {
           "    <temp 300>                 Defines the temperature of the simulation.\n"
           "    <gridspacn 0.5>            Defines the grid spacing\n"
           "    <refdens 0.0329>           Defines the reference density for the water model.\n"
-          "    febiss                     Activates FEBISS placement (only for water)\n"
+          "    <febiss>                     Activates FEBISS placement (only for water)\n"
           "    <out \"out.dat\">          Defines the name of the output file.\n" 
           "    <dx>                       Set to write out dx files. Population is always written.\n"
           "    <solventStart n>           Sets the first solvent as the nth molecule.\n"
