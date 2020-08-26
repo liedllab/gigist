@@ -23,6 +23,8 @@
 
 
 #include <vector>
+#include <memory>
+
 #include <cmath>
 #include <exception>
 #include <cstdlib>
@@ -168,7 +170,6 @@ public:
 
 };
 
-
 /**
  * The Gist class (working on the GPU), implementation is based on the following Papers:
  * 
@@ -283,6 +284,11 @@ private:
 
   std::vector<int> calcQuaternionIndices(int atom_begin, int atom_end, const double *coordinates);
 
+  void Action_GIGist::calcGridStart() noexcept;
+  void Action_GIGist::calcGridEnd() noexcept;
+  void printCitationInfo() const noexcept;
+  bool analyzeInfo(ArgList &argList);
+
 
   // Functions defined for FEBISS implementation
 
@@ -379,30 +385,42 @@ private:
   DataSetList *list_;
 
   // Necessary information for the computation
-  double rho0_;
-  unsigned int numberSolvent_;
-  std::string centerSolventAtom_;
-  unsigned int numberAtoms_;
-  double temperature_;
-  int nFrames_;
-  int forceStart_;
-  int centerSolventIdx_;
-  int headAtomType_;
-  double neighbourCut2_;
-  bool energy_;
+  struct {
+    struct {
+      double temperature = 0.0;
+      double rho0 = 0.0;
+      int numberSolvent = 0;
+      int numberAtoms = 0;
+      int nFrames = 0;
+    } system;
+    struct {
+      int solventStart = -1;
+      std::string centerAtom;
+      int centerIdx = -1;
+      int centerType = -1;
+      double neighborCutoff = 0.0;
+      bool calcEnergy = true;
+      bool writeDx = true;
+      bool doorder = true;
+      bool useCOM = true;
+    } gist;
+    struct {
+      double voxelSize = 0.0;
+      double voxelVolume = 0.0;
+      int nVoxels = 0;
+      Vec3 dimensions;
+      Vec3 center;
+      Vec3 start;
+      Vec3 end;
+    } grid;
+  } info_;
 
   // Topology Object
   Topology *top_;
+  ImagedAction image_;
 
   // Defining the Grid
-  double voxelVolume_;
-  double voxelSize_;
-  unsigned int nVoxels_;
-  Vec3 dimensions_;
-  Vec3 center_;
-  Vec3 gridStart_;
-  Vec3 gridEnd_;
-  ImagedAction image_;
+  
 
   // Vector to store the result
   std::vector<DataSet_3D*> result_;
@@ -418,7 +436,7 @@ private:
 
   // Is a usual array, as std::vector<bool> is actually not a vector storing boolean
   // values but a bit string with the boolean values encoded at each position.
-  bool *solvent_;
+  std::unique_ptr<bool []> solvent_;
   // FEBISS related variables
   bool placeWaterMolecules_ = false;
   int nSoluteAtoms_ = 0;
@@ -434,9 +452,6 @@ private:
   CpptrajFile *febissWaterfile_;
 
   std::vector<int> solventAtomCounter_;
-  bool writeDx_;
-  bool doorder_;
-  bool use_com_;
   bool wrongNumberOfAtoms_;
 
   Timer tRot_;
