@@ -122,7 +122,7 @@ public:
   }
 
   __host__ __device__
-  float operator[](int idx) {
+  float operator[](int idx) const {
     if (idx >= 0 && idx < 9) {
       return this->array[idx];
     }
@@ -182,7 +182,7 @@ public:
   }
 
   __host__ __device__
-  float operator[](int idx) {
+  float operator[](int idx) const {
     if (idx < 9 && idx >= 0) {
       return this->array[idx];
     }
@@ -229,12 +229,12 @@ public:
 
 
 // Device functions
-__device__ float dist2_imageOrtho(float *, float *, BoxInfo);
-__device__ void scalarProd(float* , BoxInfo , float *);
-__device__ float dist2_imageNonOrtho(float *, float *, BoxInfo, UnitCell);
-__device__ float calcIfDistIsSmaller(float *, float *, int , int , int , UnitCell, float );
-__device__ float dist2_imageNonOrthoRecip(float * , float * , UnitCell);
-__device__ float dist2_imageNonOrthoRecipTest(float * , float * , UnitCell );
+__device__ float dist2_imageOrtho(float *, float *, const BoxInfo &);
+__device__ void scalarProd(float* , const BoxInfo & , float *);
+__device__ float dist2_imageNonOrtho(float *, float *, const BoxInfo &, const UnitCell &);
+__device__ float calcIfDistIsSmaller(float *, float *, int , int , int , const UnitCell &, float );
+__device__ float dist2_imageNonOrthoRecip(float * , float * , const UnitCell &);
+__device__ float dist2_imageNonOrthoRecipTest(float * , float * , const UnitCell );
 __device__ float dist2_noImage(float *, float *);
 __device__ float calcTotalEnergy(float , float , 
                             float , float , float);
@@ -243,7 +243,7 @@ __device__ float calcElectrostaticEnergy(float, float, float);
 __device__ int getLJIndex(int , int , int *, int );
 __device__ ParamsLJ getLJParam(int , int , int *, int , ParamsLJ *);
 __device__ bool isOnGrid(float *, float *, float *);
-__device__ float calcDist(float *, float *, BoxInfo, UnitCell);
+__device__ float calcDist(float *, float *, const BoxInfo &, const UnitCell &);
 
 // Global functions
 __global__ void cudaCalcEnergy    (Coordinates_GPU *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *, float *, float *, int, float, int *, int *);
