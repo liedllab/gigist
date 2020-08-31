@@ -111,8 +111,8 @@ void freeCuda(void *array) {
  * This starts the cuda kernel, thus it is actually a quite long function.
  */
 __host__
-std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *NBindex_c, int ntypes, void *parameter, void *molecule_c,
-                            int boxinfo, float *recip_o_box, float *ucell, int maxAtoms, float *min_c, float *max_c, int headAtomType, 
+EnergyReturn doActionCudaEnergy(const double *coords, int *NBindex_c, int ntypes, void *parameter, void *molecule_c,
+                            int boxinfo, float *recip_o_box, float *ucell, int maxAtoms, int headAtomType, 
                             float neighbourCut2, int *result_o, int *result_n, float *result_w_c, float *result_s_c,
                             int *result_O_c, int *result_N_c, bool doorder) {
   Coordinates_GPU *coords_c   = NULL;
@@ -179,7 +179,7 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
   // (this is about 10% slower).
   if (doorder) {
     cudaCalcEnergySlow<<< (maxAtoms + SLOW_BLOCKSIZE) / SLOW_BLOCKSIZE, SLOW_BLOCKSIZE >>> (coords_c, NBindex_c, ntypes, lennardJonesParams, sender,
-                                                                                            boxinf, ucellN, maxAtoms, result_w_c, result_s_c, min_c, max_c,
+                                                                                            boxinf, ucellN, maxAtoms, result_w_c, result_s_c, nullptr, nullptr,
                                                                                             headAtomType, neighbourCut2, result_O_c, result_N_c);
   } else {
     // Uses a 2D array, which is nice for memory access.
@@ -187,7 +187,7 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
     dim3 numBlocks((maxAtoms + threadsPerBlock.x) / threadsPerBlock.x, (maxAtoms + threadsPerBlock.y) / threadsPerBlock.y);
     // The actual call of the device function
     cudaCalcEnergy<<<numBlocks, threadsPerBlock>>> (coords_c, NBindex_c, ntypes, lennardJonesParams, sender,
-                                                                      boxinf, ucellN, maxAtoms, result_w_c, result_s_c, min_c, max_c,
+                                                                      boxinf, ucellN, maxAtoms, result_w_c, result_s_c, nullptr, nullptr,
                                                                       headAtomType, neighbourCut2, result_O_c, result_N_c);
     // Check if there was an error.
     cudaError_t cudaError = cudaGetLastError();
@@ -228,14 +228,11 @@ std::vector<std::vector<float> > doActionCudaEnergy(const double *coords, int *N
     result_esw.push_back(result_s[i]);
   }
 
-  result.push_back(result_eww);
-  result.push_back(result_esw);
-
   // Free everything used in here.
   cudaFree(coords_c); cudaFree(recip_b_c); cudaFree(ucell_c);
   free(result_A); free(result_s); free(coord_array);
   
-  return result;
+  return {result_eww, result_esw};
 }
 
 #ifdef DEBUG_GIST_CUDA
