@@ -10,8 +10,6 @@ Action_GIGist::Action_GIGist() :
 NBindex_c_(nullptr),
 molecule_c_(nullptr),
 paramsLJ_c_(nullptr),
-max_c_(nullptr), // TODO: unused
-min_c_(nullptr), // TODO: unused
 result_w_c_(nullptr),
 result_s_c_(nullptr),
 result_O_c_(nullptr),
@@ -19,10 +17,10 @@ result_N_c_(nullptr),
 #endif
 list_(nullptr),
 top_(nullptr),
-solvent_(nullptr),
 dict_(DataDictionary()),
 datafile_(nullptr),
 dxfile_(nullptr),
+febissWaterfile_(nullptr),
 wrongNumberOfAtoms_(false)
 {}
 
@@ -36,10 +34,10 @@ void Action_GIGist::Help() const {
           "    <temp 300>                 Defines the temperature of the simulation.\n"
           "    <gridspacn 0.5>            Defines the grid spacing\n"
           "    <refdens 0.0329>           Defines the reference density for the water model.\n"
-          "    <febiss>                     Activates FEBISS placement (only for water)\n"
+          "    <febiss>                   Activates FEBISS placement (only for water)\n"
           "    <out \"out.dat\">          Defines the name of the output file.\n" 
           "    <dx>                       Set to write out dx files. Population is always written.\n"
-          "    <solventStart n>           Sets the first solvent as the nth molecule.\n"
+          "    <solventStart [n]>         Sets the first solvent as the nth molecule (necessary for CHCl3).\n"
 
           "  The griddimensions must be set in integer values and have to be larger than 0.\n"
           "  The greatest advantage, stems from the fact that this code is parallelized\n"
@@ -65,6 +63,12 @@ Action_GIGist::~Action_GIGist() {
   #endif
 }
 
+/*****
+ * @brief Calculate the start of the grid.
+ * 
+ * Calculates the start of the grid, using the center, stepsize in each
+ * dimension and the voxel Size.
+ */
 void Action_GIGist::calcGridStart() noexcept
 {
   info_.grid.start.SetVec(info_.grid.center[0] - (info_.grid.dimensions[0] * 0.5) * info_.grid.voxelSize, 
@@ -72,6 +76,12 @@ void Action_GIGist::calcGridStart() noexcept
                           info_.grid.center[2] - (info_.grid.dimensions[2] * 0.5) * info_.grid.voxelSize);
 }
 
+/*****
+ * @brief Calculate the end of the grid.
+ * 
+ * Calculates the end of the grid, using the center, stepsize in each
+ * dimension and the voxel Size.
+ */
 void Action_GIGist::calcGridEnd() noexcept
 {
   info_.grid.end.SetVec(info_.grid.center[0] + info_.grid.dimensions[0] * info_.grid.voxelSize, 
@@ -79,18 +89,27 @@ void Action_GIGist::calcGridEnd() noexcept
                         info_.grid.center[2] + info_.grid.dimensions[2] * info_.grid.voxelSize);
 }
 
-/***
- * Document in header FILE!
+/*****
+ * @brief Get the info of the system.
  * 
+ * A helper function that takes the system specific information
+ * that is supplied by the user.
  */
-bool Action_GIGist::analyzeInfo(ArgList &argList)
+void Action_GIGist::getSystemInfo(ArgList &argList)
 {
-  // System Information
   info_.system.temperature = argList.getKeyDouble("temp", 300.0);
   info_.system.rho0 = argList.getKeyDouble("refdens", 0.0329);
   info_.system.nFrames = 0;
+}
 
-  // GIST related information
+/*****
+ * @brief Get settings for the GIST calculation.
+ * 
+ * This function takes the settings supplied by the user and sets the 
+ * appropriate values.
+ */
+void Action_GIGist::getGistSettings(ArgList &argList)
+{
   info_.gist.solventStart = argList.getKeyInt("solventStart", -1);
   info_.gist.neighborCutoff = argList.getKeyDouble("neighbour", 3.5);
   info_.gist.neighborCutoff *= info_.gist.neighborCutoff;
@@ -98,21 +117,31 @@ bool Action_GIGist::analyzeInfo(ArgList &argList)
   info_.gist.writeDx = argList.hasKey("dx");
   info_.gist.doorder = argList.hasKey("doorder");
   info_.gist.useCOM = argList.hasKey("com");
+  info_.gist.febiss = argList.hasKey("febiss");
+}
 
-  // Grid related information
+/*****
+ * @brief Grid Calculation.
+ * 
+ * Builds the grid structure from the settings of the user and then creates
+ * the logical concepts.
+ */
+bool Action_GIGist::buildGrid(ArgList &argList)
+{
   info_.grid.voxelSize = argList.getKeyDouble("gridspacn", 0.5);
   info_.grid.voxelVolume = info_.grid.voxelSize * info_.grid.voxelSize * info_.grid.voxelSize;
 
   if (argList.Contains("griddim")) {
     ArgList dimArgs = argList.GetNstringKey("griddim", 3);
-    double x = dimArgs.getNextInteger(-1.0);
-    double y = dimArgs.getNextInteger(-1.0);
-    double z = dimArgs.getNextInteger(-1.0);
-    if ( (x <= 0) || (y <= 0) || (z <= 0) ) {
+    info_.grid.dimensions[0] = dimArgs.getNextInteger(-1.0);
+    info_.grid.dimensions[1] = dimArgs.getNextInteger(-1.0);
+    info_.grid.dimensions[2] = dimArgs.getNextInteger(-1.0);
+    if ( (info_.grid.dimensions[0] <= 0) || 
+          (info_.grid.dimensions[1] <= 0) || 
+          (info_.grid.dimensions[2] <= 0) ) {
       mprinterr("Error: griddimension must be positive integers (non zero).\n\n");
       return false;
     }
-    info_.grid.dimensions.SetVec(x, y, z);
     info_.grid.nVoxels = info_.grid.dimensions[0] * info_.grid.dimensions[1] * info_.grid.dimensions[2];
   } else {
     mprinterr("Error: Dimensions must be set!\n\n");
@@ -130,16 +159,33 @@ bool Action_GIGist::analyzeInfo(ArgList &argList)
   }
   info_.grid.center.SetVec(x, y, z);
 
-  if (argList.hasKey("febiss")) {
-    placeWaterMolecules_ = true;
-  }
-
   calcGridStart();
   calcGridEnd();
 
   return true;
 }
 
+/***
+ * Document in header FILE!
+ * 
+ */
+bool Action_GIGist::analyzeInfo(ArgList &argList)
+{
+  getSystemInfo(argList);
+  getGistSettings(argList);
+  bool ret{ buildGrid(argList) };
+  #ifdef CUDA
+  if (info_.gist.doorder && !info_.gist.calcEnergy) {
+    mprinterr("Error: For CUDA code, if energy is not calculated, order parameter cannot be calculated.");
+    ret = false;
+  }
+  #endif
+  return ret;
+}
+
+/*****
+ * @brief Print citation and info.
+ */
 void Action_GIGist::printCitationInfo() const noexcept
 {
   mprintf("Center: %g %g %g, Dimensions %d %d %d\n"
@@ -160,41 +206,71 @@ void Action_GIGist::printCitationInfo() const noexcept
   );
 }
 
-
-
-/**
- * Initialize the GIST calculation by setting up the users input.
- * @param argList: The argument list of the user.
- * @param actionInit: The action initialization object.
- * @return: Action::OK on success and Action::ERR on error.
+/*****
+ * @brief Prepare the variables for the calculation on the GPU.
+ * 
+ * The different variables are set and prepared (i.e., memory allocated), so
+ * that the calculation on the GPU can be performed without any problems.
  */
-Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, int test) {
-#if defined MPI
-  if (actionInit.TrajComm().Size() > 1) {
-    mprinterr("Error: GIST cannot yet be used with MPI parallelization.\n"
-              "       Maximum allowed processes is 1, you used %d.\n",
-              actionInit.TrajComm().Size());
-    return Action::ERR;
+bool Action_GIGist::prepareGPUCalc(ActionSetup &setup) {
+#ifdef CUDA
+  if (info_.gist.calcEnergy) {
+    NonbondParmType nb{ setup.Top().Nonbond() };
+    NBIndex_ = nb.NBindex();
+    numberAtomTypes_ = nb.Ntypes();
+    for (unsigned int i = 0; i < nb.NBarray().size(); ++i) {
+      lJParamsA_.push_back( (float) nb.NBarray().at(i).A() );
+      lJParamsB_.push_back( (float) nb.NBarray().at(i).B() );
+    }
+
+    try {
+      allocateCuda(((void**)&NBindex_c_), NBIndex_.size() * sizeof(int));
+      allocateCuda((void**)&result_w_c_, info_.system.numberAtoms * sizeof(float));
+      allocateCuda((void**)&result_s_c_, info_.system.numberAtoms * sizeof(float));
+      allocateCuda((void**)&result_O_c_, info_.system.numberAtoms * 4 * sizeof(int));
+      allocateCuda((void**)&result_N_c_, info_.system.numberAtoms * sizeof(int));
+    } catch (CudaException &e) {
+      mprinterr("Error: Could not allocate memory on GPU!\n");
+      freeGPUMemory();
+      return false;
+    }
+    try {
+      copyToGPU();
+    } catch (CudaException &e) {
+      return false;
+    }
   }
 #endif
-  
-  // Get Infos
-  if (! analyzeInfo(argList) )
-    return Action::ERR;
-  
-  // Imaging
-  image_.InitImaging( true );
+  return true;
+}
 
-
-  std::string outfilename{argList.GetStringKey("out", "out.dat")};
-  datafile_ = actionInit.DFL().AddCpptrajFile( outfilename, "GIST output" );
-
-  if (placeWaterMolecules_) {
-    hVectors_.resize(info_.grid.nVoxels);
+/*****
+ * @brief Resize the vectors needed for the calculation.
+ */
+void Action_GIGist::resizeVectors()
+{
+  if (info_.gist.febiss) {
+    hVectors_.resize( info_.grid.nVoxels );
   }
-
   quaternions_.resize(info_.grid.nVoxels);
   waterCoordinates_.resize(info_.grid.nVoxels);
+}
+
+/*****
+ * @brief Create the needed datafiles and datasets.
+ * 
+ * This function creates the neceesary datasets, as well as datafiles. For the
+ * datasets, there are multiple different datasets, basically for the energies,
+ * the entropies, the dipole moments, neighbors, etc., as well as the densities
+ * for each atom of the solvent.
+ * 
+ * @param argList The argument list that was given by the user
+ * @param actionInit The action initialization object
+ */
+void Action_GIGist::createDatasets(ArgList &argList, ActionInit &actionInit)
+{
+  std::string outfilename{argList.GetStringKey("out", "out.dat")};
+  datafile_ = actionInit.DFL().AddCpptrajFile( outfilename, "GIST output" );
 
   std::string dsname{ actionInit.DSL().GenerateDefaultName("GIST") };
   result_ = std::vector<DataSet_3D *>(dict_.size());
@@ -224,9 +300,187 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
       file->AddDataSet(result_.at(i));
     }
   }
-  if (placeWaterMolecules_)
+  if (info_.gist.febiss) {
     this->febissWaterfile_ = actionInit.DFL().AddCpptrajFile( "febiss-waters.pdb", "GIST output");
+  }
+}
 
+/*****
+ * @brief Adds atom type information into the different vectors.
+ * 
+ * This function adds the charges, atom types, masses and to which molecule a
+ * given atom belongs to the appropriate vectors.
+ * 
+ * @param atom The atom for which the information should be extracted
+ */
+void Action_GIGist::addAtomType(const Atom &atom)
+{
+  molecule_.push_back(atom.MolNum());
+  charges_.push_back(atom.Charge());
+  atomTypes_.push_back(atom.TypeIndex());
+  masses_.push_back(atom.Mass());
+}
+
+
+/*****
+ * @brief From a given molecule get all atom information needed.
+ * 
+ * This function finds all the different parameters needed for the GIST
+ * calculation. Predominatntly, this function adds the different solvent
+ * specific informations about the atom. But also atom type information is
+ * added.
+ * 
+ * @param setup The setup object, where setup stuff is safed.
+ * @param mol The molecule for which the atoms should be added
+ * @param firstRound A few informations are only needed for the first round,
+ *                so that some things can be skipped during the other rounds.
+ */
+void Action_GIGist::setAtomInformation(
+  const ActionSetup &setup,
+  const Molecule& mol,
+  bool firstRound
+)
+{
+  int nAtoms{ mol.NumAtoms() };
+
+  for (int i = 0; i < nAtoms; ++i) {
+    addAtomType(setup.Top()[mol.BeginAtom() + i]);
+    // Check if the molecule is a solvent, either by the topology parameters or because force was set.
+    if ( (mol.IsSolvent() && info_.gist.solventStart == -1) 
+            || (( info_.gist.solventStart > -1 ) 
+                        && 
+                ( setup.Top()[mol.BeginAtom()].MolNum() >= info_.gist.solventStart ))
+    ) {
+
+      std::string aName{ setup.Top()[mol.BeginAtom() + i].ElementName() };
+      
+      // Check if dictionary already holds an entry for the atoms name, if not add it to
+      // the dictionary, if yes, add 1 to the correct solvent atom counter.
+      if (! (dict_.contains(aName)) ) {
+        dict_.add(aName);
+        solventAtomCounter_.push_back(1);
+      } else if (firstRound) {
+        solventAtomCounter_.at(dict_.getIndex(aName) - result_.size()) += 1;
+      }
+      // Check for the centerSolventAtom (which in this easy approximation is either C or O)
+      if ( weight(aName) < weight(info_.gist.centerAtom) ) {
+        info_.gist.centerAtom = setup.Top()[mol.BeginAtom() + i].ElementName();
+        info_.gist.centerIdx = i; // Assumes the same order of atoms.
+        info_.gist.centerType = setup.Top()[mol.BeginAtom() + i].TypeIndex();
+      }
+      // Set solvent to true
+      solvent_[mol.BeginAtom() + i] = true;
+    } else {
+      solvent_[mol.BeginAtom() + i] = false;
+    }
+  }
+}
+
+/*****
+ * @brief Goes over all molecules and sets the appropriate information for this
+ * molecule.
+ * 
+ * Compared to the atom function, this function does not really change much by
+ * itself, but simply goes over all the different molecules and hands the
+ * different molecules to the atom function.
+ * 
+ * @param setup The action setup object for setting up the GIST calculation
+ */
+void Action_GIGist::setMoleculeInformation(ActionSetup &setup)
+{
+  bool firstRound{ true };
+
+  // Save different values, which depend on the molecules and/or atoms.
+  for (auto mol = setup.Top().MolStart(); 
+       mol != setup.Top().MolEnd(); ++mol) {
+    setAtomInformation(setup, *(mol.base()), firstRound);
+    if ((mol->IsSolvent() && info_.gist.solventStart == -1) || 
+          (
+            ( info_.gist.solventStart > -1 ) 
+            && 
+            ( setup.Top()[mol->BeginAtom()].MolNum() >= info_.gist.solventStart )
+          )
+    ) {
+      firstRound = false;
+    }
+  }
+}
+
+
+/*****
+ * @brief Prepares the density grids
+ * 
+ * Before this was changed, only water could be analyzed, so this stuff did
+ * not need to be dynamically managed. Since I changed that, this must also be
+ * changed, so that this is now dynamically allocated.
+ */
+void Action_GIGist::prepDensityGrids()
+{
+  // Add results for the different solvent atoms.
+  for (unsigned int i = 0; i < (dict_.size() - result_.size()); ++i) {
+    resultV_.push_back(
+      std::vector<double>(
+        info_.grid.dimensions[0] *
+        info_.grid.dimensions[1] *
+        info_.grid.dimensions[2]
+      )
+    );
+  }
+}
+
+/*****
+ * @brief Prepares the quaternion calculation
+ * 
+ * This function analyzes the molecule and picks appropriate atoms for the 
+ * quaternion construction needed for the GIST calculations.
+ * 
+ * @param frame The frame is needed, because for the calculation the
+ *              coordinates are needed.
+ */
+void Action_GIGist::prepQuaternion(ActionFrame &frame)
+{
+  for (Topology::mol_iterator mol = top_->MolStart(); mol < top_->MolEnd(); ++mol) {
+      int moleculeLength = mol->EndAtom() - mol->BeginAtom() + 1;
+      if (moleculeLength < 3)
+         continue;
+      if ((mol->IsSolvent() && info_.gist.solventStart == -1 ) || 
+        (
+          ( info_.gist.solventStart > -1 ) &&
+          ( top_->operator[](mol->BeginAtom()).MolNum() >= info_.gist.solventStart )
+          )
+      ) {
+	      quat_indices_ = calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().XYZ(mol->BeginAtom()));
+        break;
+      }
+    }
+}
+
+
+/**
+ * Initialize the GIST calculation by setting up the users input.
+ * @param argList: The argument list of the user.
+ * @param actionInit: The action initialization object.
+ * @return: Action::OK on success and Action::ERR on error.
+ */
+Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, int test) {
+#if defined MPI
+  if (actionInit.TrajComm().Size() > 1) {
+    mprinterr("Error: GIST cannot yet be used with MPI parallelization.\n"
+              "       Maximum allowed processes is 1, you used %d.\n",
+              actionInit.TrajComm().Size());
+    return Action::ERR;
+  }
+#endif
+  
+  // Get Infos
+  if (! analyzeInfo(argList) ) {
+    return Action::ERR;
+  }
+  
+  // Imaging
+  image_.InitImaging( true );
+  resizeVectors();
+  createDatasets(argList, actionInit);
   printCitationInfo();
   
   return Action::OK;
@@ -246,102 +500,66 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
   top_             = setup.TopAddress();
   info_.system.numberAtoms = setup.Top().Natom();
   info_.system.numberSolvent   = setup.Top().Nsolvent();
-  solvent_ = std::make_unique<bool []>(info_.system.numberAtoms);
-  bool firstRound{ true };
+  //solvent_ = std::make_unique<bool []>(info_.system.numberAtoms);
+  solvent_ = std::unique_ptr<bool []>(new bool[info_.system.numberAtoms]);
 
-  // Save different values, which depend on the molecules and/or atoms.
-  for (Topology::mol_iterator mol = setup.Top().MolStart(); 
-          mol != setup.Top().MolEnd(); ++mol) {
-    int nAtoms{ static_cast<int>(mol->NumAtoms()) };
+  setMoleculeInformation(setup);
 
-    for (int i = 0; i < nAtoms; ++i) {
-      molecule_.push_back( setup.Top()[mol->BeginAtom() + i].MolNum() );
-      charges_.push_back( setup.Top()[mol->BeginAtom() + i].Charge() );
-      atomTypes_.push_back( setup.Top()[mol->BeginAtom() + i].TypeIndex() );
-      masses_.push_back( setup.Top()[mol->BeginAtom() + i].Mass());
+  prepDensityGrids();
 
-      // Check if the molecule is a solvent, either by the topology parameters or because force was set.
-      if ( (mol->IsSolvent() && info_.gist.solventStart == -1) 
-              || (( info_.gist.solventStart > -1 ) 
-                          && 
-                  ( setup.Top()[mol->BeginAtom()].MolNum() >= info_.gist.solventStart ))
-        ) {
-        std::string aName{ setup.Top()[mol->BeginAtom() + i].ElementName() };
-        
-        // Check if dictionary already holds an entry for the atoms name, if not add it to
-        // the dictionary, if yes, add 1 to the correct solvent atom counter.
-        if (! (dict_.contains(aName)) ) {
-          dict_.add(aName);
-          solventAtomCounter_.push_back(1);
-        } else if (firstRound) {
-          solventAtomCounter_.at(dict_.getIndex(aName) - result_.size()) += 1;
-        }
-
-        // Check for the centerSolventAtom (which in this easy approximation is either C or O)
-        if ( weight(aName) < weight(info_.gist.centerAtom) ) {
-          info_.gist.centerAtom = setup.Top()[mol->BeginAtom() + i].ElementName();
-          info_.gist.centerIdx = i; // Assumes the same order of atoms.
-          info_.gist.centerType = setup.Top()[mol->BeginAtom() + i].TypeIndex();
-        }
-        // Set solvent to true
-        solvent_[mol->BeginAtom() + i] = true;
-      } else {
-        solvent_[mol->BeginAtom() + i] = false;
-      }
-    }
-    if ((mol->IsSolvent() && info_.gist.solventStart == -1) || 
-          (
-            ( info_.gist.solventStart > -1 ) 
-            && 
-            ( setup.Top()[mol->BeginAtom()].MolNum() >= info_.gist.solventStart )
-          )
-    ) {
-      firstRound = false;
-    }
-  }
-  // Add results for the different solvent atoms.
-  for (unsigned int i = 0; i < (dict_.size() - result_.size()); ++i) {
-    resultV_.push_back(
-      std::vector<double>(
-        info_.grid.dimensions[0] *
-        info_.grid.dimensions[1] *
-        info_.grid.dimensions[2]
-      )
-    );
-  }
-
-  
-  // Define different things for the case that this was compiled using CUDA
-#ifdef CUDA
-  NonbondParmType nb{ setup.Top().Nonbond() };
-  NBIndex_ = nb.NBindex();
-  numberAtomTypes_ = nb.Ntypes();
-  for (unsigned int i = 0; i < nb.NBarray().size(); ++i) {
-    lJParamsA_.push_back( (float) nb.NBarray().at(i).A() );
-    lJParamsB_.push_back( (float) nb.NBarray().at(i).B() );
-  }
-
-  try {
-    allocateCuda(((void**)&NBindex_c_), NBIndex_.size() * sizeof(int));
-    allocateCuda((void**)&max_c_, 3 * sizeof(float));
-    allocateCuda((void**)&min_c_, 3 * sizeof(float));
-    allocateCuda((void**)&result_w_c_, numberAtoms_ * sizeof(float));
-    allocateCuda((void**)&result_s_c_, numberAtoms_ * sizeof(float));
-    allocateCuda((void**)&result_O_c_, numberAtoms_ * 4 * sizeof(int));
-    allocateCuda((void**)&result_N_c_, numberAtoms_ * sizeof(int));
-  } catch (CudaException &e) {
-    mprinterr("Error: Could not allocate memory on GPU!\n");
-    freeGPUMemory();
+  if (!prepareGPUCalc(setup)) {
     return Action::ERR;
   }
-  try {
-    copyToGPU();
-  } catch (CudaException &e) {
-    return Action::ERR;
-  }
-#endif
+
   return Action::OK;
 }
+
+
+
+Action_GIGist::TestObj Action_GIGist::calcBoxParameters(ActionFrame &frame)
+{
+  Matrix_3x3 ucell_m{}, recip_m{};
+  std::unique_ptr<float[]> recip;
+  std::unique_ptr<float[]> ucell;;
+  int boxinfo{};
+  // Check Boxinfo and write the necessary data into recip, ucell and boxinfo.
+  switch(image_.ImageType()) {
+    case NONORTHO:
+      recip = std::unique_ptr<float[]>(new float[9]);
+      ucell = std::unique_ptr<float[]>(new float[9]);
+      frame.Frm().BoxCrd().ToRecip(ucell_m, recip_m);
+      for (int i = 0; i < 9; ++i) {
+        ucell[i] = static_cast<float>( ucell_m.Dptr()[i] );
+        recip[i] = static_cast<float>( recip_m.Dptr()[i] );
+      }
+      boxinfo = 2;
+      break;
+    case ORTHO:
+      recip = std::unique_ptr<float[]>(new float[9]);
+      for (int i = 0; i < 3; ++i) {
+        recip[i] = static_cast<float>( frame.Frm().BoxCrd()[i] );
+      }
+      ucell = nullptr;
+      boxinfo = 1;
+      break;
+    case NOIMAGE:
+      recip = nullptr;
+      ucell = nullptr;
+      boxinfo = 0;
+      break;
+    default:
+      throw "Error: Unexpected box information found.";
+  }
+  TestObj test;
+  test.recip.swap(recip);
+  test.ucell.swap(ucell);
+  test.boxinfo = boxinfo;
+
+  return test;
+}
+
+
+
 
 /**
  * Starts the calculation of GIST. Can use either CUDA, OPENMP or single thread code.
@@ -359,122 +577,68 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
   std::vector<std::vector<int> > order_indices{};
   
 
-  if (placeWaterMolecules_ && info_.system.nFrames == 1) {
+  if (info_.gist.febiss && info_.system.nFrames == 1) {
     this->writeOutSolute(frame);
   }
 
 
   if (info_.gist.useCOM && info_.system.nFrames == 1) 
   {
-    for (Topology::mol_iterator mol = top_->MolStart(); mol < top_->MolEnd(); ++mol) {
-      int moleculeLength = mol->EndAtom() - mol->BeginAtom() + 1;
-      if (moleculeLength < 3)
-         continue;
-      if ((mol->IsSolvent() && info_.gist.solventStart == -1 ) || 
-        (
-          ( info_.gist.solventStart > -1 ) &&
-          ( top_->operator[](mol->BeginAtom()).MolNum() >= info_.gist.solventStart )
-          )
-      ) {
-	      quat_indices_ = calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().XYZ(mol->BeginAtom()));
-        break;
-      }
-    }
+    prepQuaternion(frame);
   }
-  
   // CUDA necessary information
   #ifdef CUDA
   std::vector<int> result_o{ std::vector<int>(4 * info_.system.numberAtoms) };
   std::vector<int> result_n{ std::vector<int>(info_.system.numberAtoms) };
   if (info_.gist.calcEnergy){
-  tEnergy_.Start();
+    auto boxParams{ calcBoxParameters(frame) };
 
-  Matrix_3x3 ucell_m{}, recip_m{};
-  float *recip = nullptr;
-  float *ucell = nullptr;
-  int boxinfo{};
+    // std::vector<int> result_o{ std::vector<int>(4 * info_.system.numberAtoms) };
+    // std::vector<int> result_n{ std::vector<int>(info_.system.numberAtoms) };
+    // TODO: Switch things around a bit and move the back copying to the end of the calculation.
+    //       Then the time needed to go over all waters and the calculations that come with that can
+    //			 be hidden quite nicely behind the interaction energy calculation.
+    // Must create arrays from the vectors, does that by getting the address of the first element of the vector.
+    auto e_result{ 
+      doActionCudaEnergy(
+        frame.Frm().xAddress(),
+        NBindex_c_,
+        numberAtomTypes_,
+        paramsLJ_c_,
+        molecule_c_,
+        boxParams.boxinfo,
+        boxParams.recip.get(),
+        boxParams.ucell.get(),
+        info_.system.numberAtoms,
+        info_.gist.centerType,
+        info_.gist.neighborCutoff,
+        &(result_o[0]),
+        &(result_n[0]),
+        result_w_c_,
+        result_s_c_,
+        result_O_c_,
+        result_N_c_,
+        info_.gist.doorder) };
+    eww_result = e_result.eww;
+    esw_result = e_result.esw;
 
-  // Check Boxinfo and write the necessary data into recip, ucell and boxinfo.
-  switch(image_.ImageType()) {
-    case NONORTHO:
-      recip = new float[9];
-      ucell = new float[9];
-      frame.Frm().BoxCrd().ToRecip(ucell_m, recip_m);
-      for (int i = 0; i < 9; ++i) {
-        ucell[i] = static_cast<float>( ucell_m.Dptr()[i] );
-        recip[i] = static_cast<float>( recip_m.Dptr()[i] );
+    if (info_.gist.doorder) {
+      int counter{ 0 };
+      for (int i = 0; i < (4 * info_.system.numberAtoms); i += 4) {
+        ++counter;
+        std::vector<int> temp{};
+        for (unsigned int j = 0; j < 4; ++j) {
+          temp.push_back(result_o.at(i + j));
+        }
+        order_indices.push_back(temp);
       }
-      boxinfo = 2;
-      break;
-    case ORTHO:
-      recip = new float[9];
-      for (int i = 0; i < 3; ++i) {
-        recip[i] = static_cast<float>( frame.Frm().BoxCrd()[i] );
-      }
-      ucell = nullptr;
-      boxinfo = 1;
-      break;
-    case NOIMAGE:
-      recip = nullptr;
-      ucell = nullptr;
-      boxinfo = 0;
-      break;
-    default:
-      mprinterr("Error: Unexpected box information found.");
-      return Action::ERR;
-  }
-
-  // std::vector<int> result_o{ std::vector<int>(4 * info_.system.numberAtoms) };
-  // std::vector<int> result_n{ std::vector<int>(info_.system.numberAtoms) };
-  // TODO: Switch things around a bit and move the back copying to the end of the calculation.
-  //       Then the time needed to go over all waters and the calculations that come with that can
-  //			 be hidden quite nicely behind the interaction energy calculation.
-  // Must create arrays from the vectors, does that by getting the address of the first element of the vector.
-  std::vector<std::vector<float> > e_result{ 
-    doActionCudaEnergy(
-      frame.Frm().xAddress(),
-      NBindex_c_,
-      numberAtomTypes_,
-      paramsLJ_c_,
-      molecule_c_,
-      boxinfo,
-      recip,
-      ucell,
-      info_.syste.numberAtoms,
-      min_c_,
-      max_c_,
-      info_.system.headAtomType,
-      info_.gist.neigborCutoff,
-      &(result_o[0]),
-      &(result_n[0]),
-      result_w_c_,
-      result_s_c_,
-      result_O_c_,
-      result_N_c_,
-      info_.gist.doorder) };
-  eww_result = e_result.at(0);
-  esw_result = e_result.at(1);
-
-  if (info_.gist.doorder) {
-    int counter{ 0 };
-    for (unsigned int i = 0; i < (4 * info_.system.numberAtoms); i += 4) {
-      ++counter;
-      std::vector<int> temp{};
-      for (unsigned int j = 0; j < 4; ++j) {
-        temp.push_back(result_o.at(i + j));
-      }
-      order_indices.push_back(temp);
     }
-  }
 
-  delete[] recip;
-  delete[] ucell;
-
-  tEnergy_.Stop();
+    tEnergy_.Stop();
   }
   #endif
 
-  std::vector<bool> onGrid(top_->Natom());
+  std::vector<bool> onGrid(info_.system.numberAtoms);
   for (unsigned int i = 0; i < onGrid.size(); ++i) {
     onGrid.at(i) = false;
   }
@@ -489,7 +653,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         ( info_.gist.solventStart > -1 ) &&
         ( top_->operator[](mol->BeginAtom()).MolNum() >= info_.gist.solventStart )
       )
-    ) {  
+    ) {
       int headAtomIndex{ -1 };
       // Keep voxel at -1 if it is not possible to put it on the grid
       int voxel{ -1 };
@@ -554,39 +718,39 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       tHead_.Stop();
       #endif
 
+      
+
       if (voxel != -1) {
-        this->result_.at(this->dict_.getIndex("population"))->UpdateVoxel(voxel, 1.0);
-        
+        // MOVE TO OWN FUNCTION!  
         #if !defined _OPENMP && !defined CUDA
-        this->tRot_.Start();
+        tRot_.Start();
         #endif
         Vec3 X;
         Vec3 Y;
         bool setX = false;
         bool setY = false;
-
-        for (unsigned int i = 0; i < molAtomCoords.size(); ++i) {
-          if ((int)i != headAtomIndex) {
-            if (setX && !setY) {
-              Y.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
-                        molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
-                        molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
-              if (placeWaterMolecules_)
-                this->hVectors_.at(voxel).push_back(Vec3(Y[0], Y[1], Y[2]));
-              Y.Normalize();
-              setY = true;
-            }
-            if (!setX) {
-              X.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
-                        molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
-                        molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
-              if (placeWaterMolecules_)
-                this->hVectors_.at(voxel).push_back(Vec3(X[0], X[1], X[2]));
-              X.Normalize();
-              setX = true;
-            }
-            if (setX && setY) {
-              break;
+        if (info_.gist.febiss){
+          for (unsigned int i = 0; i < molAtomCoords.size(); ++i) {
+            if ((int)i != headAtomIndex) {
+              if (setX && !setY) {
+                Y.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
+                          molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
+                          molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
+                hVectors_.at(voxel).push_back(Y);
+                Y.Normalize();
+                setY = true;
+              }
+              if (!setX) {
+                X.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
+                          molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
+                          molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
+                hVectors_.at(voxel).push_back(X);
+                X.Normalize();
+                setX = true;
+              }
+              if (setX && setY) {
+                break;
+              }
             }
           }
         }
@@ -814,11 +978,13 @@ void Action_GIGist::Print() {
   #endif
   mprintf("Processed %d frames.\nMoving on to entropy calculation.\n", info_.system.nFrames);
   ProgressBar progBarEntropy(info_.grid.nVoxels);
+
+  
 #ifdef _OPENMP
   int curVox{ 0 };
 #endif
   #pragma omp parallel for
-  for (unsigned int voxel = 0; voxel < info_.grid.nVoxels; ++voxel) {
+  for (int voxel = 0; voxel < info_.grid.nVoxels; ++voxel) {
     // If _OPENMP is defined, the progress bar has to be updated critically,
     // to ensure the right addition.
 #ifndef _OPENMP
@@ -842,6 +1008,7 @@ void Action_GIGist::Print() {
     double neighbour_norm   { 0.0 };
     // Only calculate if there is actually water molecules at that position.
     if (result_.at(dict_.getIndex("population"))->operator[](voxel) > 0) {
+      
       double pop = result_.at(dict_.getIndex("population"))->operator[](voxel);
       // Used for calcualtion of the Entropy on the GPU
       #ifdef CUDA_UPDATED
@@ -870,6 +1037,7 @@ void Action_GIGist::Print() {
       neighbour_norm = result_.at(dict_.getIndex("neighbour"))->operator[](voxel) / pop;
       neighbour_dens = result_.at(dict_.getIndex("neighbour"))->operator[](voxel) / (info_.system.nFrames * info_.grid.voxelVolume);
     }
+
     
     // Calculate the final dipole values. The temporary data grid has to be used, as data
     // already saved cannot be updated.
@@ -902,7 +1070,7 @@ void Action_GIGist::Print() {
     }
   }
 
-  if (placeWaterMolecules_) {
+  if (info_.gist.febiss) {
     if (info_.gist.centerAtom == "O" && solventAtomCounter_.size() == 2) {
       placeFebissWaters();
     } else {
@@ -927,7 +1095,7 @@ void Action_GIGist::Print() {
   // Final output, the DX files are done automatically by cpptraj
   // so only the standard GIST-format is done here
   ProgressBar progBarIO(info_.grid.nVoxels);
-  for (unsigned int voxel = 0; voxel < info_.grid.nVoxels; ++voxel) {
+  for (int voxel = 0; voxel < info_.grid.nVoxels; ++voxel) {
     progBarIO.Update( voxel );
     size_t i{}, j{}, k{};
     result_.at(dict_.getIndex("population"))->ReverseIndex(voxel, i, j, k);
@@ -1263,7 +1431,8 @@ int Action_GIGist::weight(std::string atom) {
 void Action_GIGist::writeDxFile(std::string name, const std::vector<double> &data) {
   std::ofstream file{};
   file.open(name.c_str());
-  Vec3 origin{ info_.grid.center - info_.grid.dimensions * (0.5 * info_.grid.voxelSize) };
+  Vec3 griddim{ info_.grid.dimensions.data() };
+  Vec3 origin{ info_.grid.center - griddim * (0.5 * info_.grid.voxelSize) };
   file << "object 1 class gridpositions counts " << info_.grid.dimensions[0] << " " << info_.grid.dimensions[1] << " " << info_.grid.dimensions[2] << "\n";
   file << "origin " << origin[0] << " " << origin[1] << " " << origin[2] << "\n";
   file << "delta " << info_.grid.voxelSize << " 0 0\n";
@@ -1413,7 +1582,8 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
       }
       else
       {
-        if ( (X * (coord - com)) / (X.Length() * (coord - com).Length()) <= 0.9)
+        double angleCos{ (X * (coord - com)) / (X.Length() * (coord - com).Length()) };
+        if ( angleCos <= 0.9 && angleCos >= 0.3)
         {
           indices.push_back(i);
           return indices;
@@ -1438,12 +1608,12 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
             indices.push_back(i);
             X = coord - com;
           }
-          else
-          {
-            if ( (X * (coord - com)) / (X.Length() * (coord - com).Length()) <= 0.9)
+          else {
+            double angleCos{ (X * (coord - com)) / (X.Length() * (coord - com).Length()) };
+            if ( angleCos <= 0.9 && angleCos >= 0.3)
             {
-              indices.push_back(i);
-              return indices;
+                indices.push_back(i);
+                return indices;
             }
           }
         }
@@ -1570,8 +1740,6 @@ void Action_GIGist::freeGPUMemory(void) {
   freeCuda(NBindex_c_);
   freeCuda(molecule_c_);
   freeCuda(paramsLJ_c_);
-  freeCuda(max_c_);
-  freeCuda(min_c_);
   freeCuda(result_w_c_);
   freeCuda(result_s_c_);
   freeCuda(result_O_c_);
@@ -1579,8 +1747,6 @@ void Action_GIGist::freeGPUMemory(void) {
   NBindex_c_   = nullptr;
   molecule_c_  = nullptr;
   paramsLJ_c_  = nullptr;
-  max_c_     = nullptr;
-  min_c_     = nullptr;
   result_w_c_= nullptr;
   result_s_c_= nullptr;
   result_O_c_  = nullptr;
@@ -1592,13 +1758,9 @@ void Action_GIGist::freeGPUMemory(void) {
  * @throws: CudaException
  */
 void Action_GIGist::copyToGPU(void) {
-  float grids[3]{ static_cast<float>(gridStart_[0]), static_cast<float>(gridStart_[1]), static_cast<float>(gridStart_[2]) };
-  float gride[3]{ static_cast<float>(gridEnd_[0]), static_cast<float>(gridEnd_[1]), static_cast<float>(gridEnd_[2]) };
   try {
     copyMemoryToDevice(&(NBIndex_[0]), NBindex_c_, NBIndex_.size() * sizeof(int));
-    copyMemoryToDevice(grids, min_c_, 3 * sizeof(float));
-    copyMemoryToDevice(gride, max_c_, 3 * sizeof(float));
-    copyMemoryToDeviceStruct(&(charges_[0]), &(atomTypes_[0]), solvent_, &(molecule_[0]), numberAtoms_, &(molecule_c_),
+    copyMemoryToDeviceStruct(&(charges_[0]), &(atomTypes_[0]), solvent_.get(), &(molecule_[0]), info_.system.numberAtoms, &(molecule_c_),
                               &(lJParamsA_[0]), &(lJParamsB_[0]), lJParamsA_.size(), &(paramsLJ_c_));
   } catch (CudaException &ce) {
     freeGPUMemory();
@@ -1621,7 +1783,7 @@ void Action_GIGist::placeFebissWaters(void) {
   /* calculate delta G and read density data */
   std::vector<double> deltaG;
   std::vector<double> relPop;
-  for (unsigned int voxel = 0; voxel < info_.grid.nVoxels; ++voxel) {
+  for (int voxel = 0; voxel < info_.grid.nVoxels; ++voxel) {
     double dTSt = result_.at(dict_.getIndex("dTStrans_norm"))->operator[](voxel);
     double dTSo = result_.at(dict_.getIndex("dTSorient_norm"))->operator[](voxel);
     double esw = result_.at(dict_.getIndex("Esw_norm"))->operator[](voxel);
@@ -1701,7 +1863,7 @@ void Action_GIGist::placeFebissWaters(void) {
     /* determine density weighted delta G with now reached density */
     double weightedDeltaG = assignDensityWeightedDeltaG(
         index, shellNum, densityValue, densityValueOld, relPop, deltaG);
-    int atomNumber = 3 * i + nSoluteAtoms_; // running index in pdb file
+    int atomNumber = 3 * i + info_.system.numberSoluteAtoms; // running index in pdb file
     /* write new water to pdb */
     writeFebissPdb(atomNumber, voxelCoords, h1, h2, weightedDeltaG);
     /* subtract density in included shells */
@@ -1721,7 +1883,7 @@ void Action_GIGist::writeOutSolute(ActionFrame& frame) {
        mol < top_->MolEnd(); ++mol) {
     if (!mol->IsSolvent()) {
       for (int atom = mol->BeginAtom(); atom < mol->EndAtom(); ++atom) {
-        nSoluteAtoms_++;
+        info_.system.numberSoluteAtoms++;
         const double *vec = frame.Frm().XYZ(atom);
         soluteCoords.push_back(Vec3(vec));
         soluteEle.push_back(top_->operator[](atom).ElementName());
@@ -1764,7 +1926,7 @@ void Action_GIGist::determineGridShells(void) {
   /* do not use center_ because it does not align with a voxel but lies between voxels */
   /* however the first shell must be solely the voxel itself -> use coords from center voxel */
   Vec3 centerCoords = coordsFromIndex(centerIndex);
-  for (unsigned int vox = 0; vox < info_.grid.nVoxels; ++vox) {
+  for (int vox = 0; vox < info_.grid.nVoxels; ++vox) {
     /* determine squared distance */
     Vec3 coords = coordsFromIndex(vox);
     Vec3 difference = coords - centerCoords;
