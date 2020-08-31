@@ -312,6 +312,10 @@ private:
   void prepDensityGrids();
   void prepQuaternion(ActionFrame &frame);
   TestObj calcBoxParameters(ActionFrame &frame);
+void calcHVectors(
+  int voxel,
+  int headAtomIndex,
+  const std::vector<Vec3> &molAtomCoords);
 
   // Functions defined for FEBISS implementation
 

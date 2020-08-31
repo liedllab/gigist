@@ -558,6 +558,41 @@ Action_GIGist::TestObj Action_GIGist::calcBoxParameters(ActionFrame &frame)
   return test;
 }
 
+void Action_GIGist::calcHVectors(
+  int voxel,
+  int headAtomIndex,
+  const std::vector<Vec3> &molAtomCoords)
+{
+  Vec3 X;
+  Vec3 Y;
+  bool setX = false;
+  bool setY = false;
+  if (info_.gist.febiss){
+    for (unsigned int i = 0; i < molAtomCoords.size(); ++i) {
+      if ((int)i != headAtomIndex) {
+        if (setX && !setY) {
+          Y.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
+                    molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
+                    molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
+          hVectors_.at(voxel).push_back(Y);
+          Y.Normalize();
+          setY = true;
+        }
+        if (!setX) {
+          X.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
+                    molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
+                    molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
+          hVectors_.at(voxel).push_back(X);
+          X.Normalize();
+          setX = true;
+        }
+        if (setX && setY) {
+          break;
+        }
+      }
+    }
+  }
+}
 
 
 
@@ -721,40 +756,13 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       
 
       if (voxel != -1) {
-        // MOVE TO OWN FUNCTION!  
-        #if !defined _OPENMP && !defined CUDA
+
+        calcHVectors(voxel, headAtomIndex, molAtomCoords);
+
+        #if !defined _OPENMP
         tRot_.Start();
         #endif
-        Vec3 X;
-        Vec3 Y;
-        bool setX = false;
-        bool setY = false;
-        if (info_.gist.febiss){
-          for (unsigned int i = 0; i < molAtomCoords.size(); ++i) {
-            if ((int)i != headAtomIndex) {
-              if (setX && !setY) {
-                Y.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
-                          molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
-                          molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
-                hVectors_.at(voxel).push_back(Y);
-                Y.Normalize();
-                setY = true;
-              }
-              if (!setX) {
-                X.SetVec(molAtomCoords.at(i)[0] - molAtomCoords.at(headAtomIndex)[0], 
-                          molAtomCoords.at(i)[1] - molAtomCoords.at(headAtomIndex)[1], 
-                          molAtomCoords.at(i)[2] - molAtomCoords.at(headAtomIndex)[2]);
-                hVectors_.at(voxel).push_back(X);
-                X.Normalize();
-                setX = true;
-              }
-              if (setX && setY) {
-                break;
-              }
-            }
-          }
-        }
-
+        
         Quaternion<DOUBLE_O_FLOAT> quat{};
         
         // Create Quaternion for the rotation from the new coordintate system to the lab coordinate system.
@@ -777,7 +785,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         //}
         
 
-        #if !defined _OPENMP && !defined CUDA
+        #if !defined _OPENMP
         tRot_.Stop();
         #endif
         
