@@ -24,6 +24,7 @@
 
 #include <vector>
 #include <memory>
+#include <array>
 
 #include <cmath>
 #include <exception>
@@ -198,6 +199,13 @@ public:
   // line: 61
   ~Action_GIGist();
 private:
+
+  struct TestObj {
+    std::unique_ptr<float []> recip;
+    std::unique_ptr<float []> ucell;
+    int boxinfo;
+  };
+
   // Inherited Functions
 
   // Is called as an initializer of the object
@@ -284,11 +292,26 @@ private:
 
   std::vector<int> calcQuaternionIndices(int atom_begin, int atom_end, const double *coordinates);
 
-  void Action_GIGist::calcGridStart() noexcept;
-  void Action_GIGist::calcGridEnd() noexcept;
+  void calcGridStart() noexcept;
+  void calcGridEnd() noexcept;
   void printCitationInfo() const noexcept;
   bool analyzeInfo(ArgList &argList);
-
+  void getSystemInfo(ArgList &argList);
+  void getGistSettings(ArgList &argList);
+  bool buildGrid(ArgList &argList);
+  bool prepareGPUCalc(ActionSetup &setup);
+  void resizeVectors();
+  void createDatasets(ArgList &argList, ActionInit &actionInit);
+  void setMoleculeInformation(ActionSetup &setup);
+  void addAtomType(const Atom &atom);
+  void setAtomInformation(
+    const ActionSetup &setup,
+    const Molecule& mol,
+    bool firstRound
+  );
+  void prepDensityGrids();
+  void prepQuaternion(ActionFrame &frame);
+  TestObj calcBoxParameters(ActionFrame &frame);
 
   // Functions defined for FEBISS implementation
 
@@ -348,6 +371,7 @@ private:
   // line: 1610
   void writeFebissPdb(const int, const Vec3&, const Vec3&, const Vec3&, const double);
 
+  
 
   // Necessary Variables
 
@@ -362,8 +386,6 @@ private:
   int *NBindex_c_;
   void *molecule_c_;
   void *paramsLJ_c_;
-  float *max_c_;
-  float *min_c_;
   float *result_w_c_;
   float *result_s_c_;
   int *result_O_c_;
@@ -385,15 +407,16 @@ private:
   DataSetList *list_;
 
   // Necessary information for the computation
-  struct {
-    struct {
+  struct Info {
+    struct System {
       double temperature = 0.0;
       double rho0 = 0.0;
       int numberSolvent = 0;
       int numberAtoms = 0;
+      int numberSoluteAtoms = 0;
       int nFrames = 0;
     } system;
-    struct {
+    struct Gist {
       int solventStart = -1;
       std::string centerAtom;
       int centerIdx = -1;
@@ -402,13 +425,14 @@ private:
       bool calcEnergy = true;
       bool writeDx = true;
       bool doorder = true;
-      bool useCOM = true;
+      bool useCOM = false;
+      bool febiss = false;
     } gist;
-    struct {
+    struct Grid {
       double voxelSize = 0.0;
       double voxelVolume = 0.0;
       int nVoxels = 0;
-      Vec3 dimensions;
+      std::array<int, 3> dimensions;
       Vec3 center;
       Vec3 start;
       Vec3 end;

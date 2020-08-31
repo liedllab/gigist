@@ -123,10 +123,7 @@ public:
 
   __host__ __device__
   float operator[](int idx) const {
-    if (idx >= 0 && idx < 9) {
-      return this->array[idx];
-    }
-    return 1;
+    return this->array[idx];
   }
 
 };
@@ -183,10 +180,7 @@ public:
 
   __host__ __device__
   float operator[](int idx) const {
-    if (idx < 9 && idx >= 0) {
-      return this->array[idx];
-    }
-    return 0;
+    return this->array[idx];
   }
 
 };
