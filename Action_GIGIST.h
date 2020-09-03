@@ -271,7 +271,7 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 
-  Vec3 calcCenterOfMass(int atom_begin, int atom_end, const double *coordinates);
+  Vec3 calcCenterOfMass(int atom_begin, int atom_end, const double *coordinates) const;
 
   // In: Action_GIGIST.cpp
   // line: 
@@ -312,10 +312,16 @@ private:
   void prepDensityGrids();
   void prepQuaternion(ActionFrame &frame);
   TestObj calcBoxParameters(ActionFrame &frame);
-void calcHVectors(
-  int voxel,
-  int headAtomIndex,
-  const std::vector<Vec3> &molAtomCoords);
+  void calcHVectors(
+    int voxel,
+    int headAtomIndex,
+    const std::vector<Vec3> &molAtomCoords);
+  std::tuple<Vec3, int> prepCom(const Molecule& mol, const ActionFrame& frame);
+  std::tuple<std::vector<DOUBLE_O_FLOAT>, 
+      std::vector<DOUBLE_O_FLOAT>,
+      std::vector<int>,
+      std::vector<int>
+> calcGPUEnergy(const ActionFrame &frame);
 
   // Functions defined for FEBISS implementation
 
