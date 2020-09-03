@@ -594,35 +594,22 @@ void Action_GIGist::calcHVectors(
   }
 }
 
+std::tuple<Vec3, int> Action_GIGist::prepCom(const Molecule& mol, const ActionFrame& frame) {
+  int mol_begin{ mol.BeginAtom() };
+  int mol_end{ mol.EndAtom() };
+  Vec3 com{ calcCenterOfMass(mol_begin, mol_end, frame.Frm().XYZ(mol_begin)) };
+  return { com, bin(mol_begin, mol_end, com, frame) };
+}
 
-
-/**
- * Starts the calculation of GIST. Can use either CUDA, OPENMP or single thread code.
- * This function is actually way too long. Refactoring of this code might help with
- * readability.
- * @param frameNum: The number of the frame.
- * @param frame: The frame itself.
- * @return: Action::ERR on error, Action::OK if everything ran smoothly.
- */
-Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
-
-  info_.system.nFrames++;
-  std::vector<DOUBLE_O_FLOAT> eww_result(info_.system.numberAtoms);
-  std::vector<DOUBLE_O_FLOAT> esw_result(info_.system.numberAtoms);
-  std::vector<std::vector<int> > order_indices{};
-  
-
-  if (info_.gist.febiss && info_.system.nFrames == 1) {
-    this->writeOutSolute(frame);
-  }
-
-
-  if (info_.gist.useCOM && info_.system.nFrames == 1) 
-  {
-    prepQuaternion(frame);
-  }
-  // CUDA necessary information
+std::tuple<std::vector<DOUBLE_O_FLOAT>, 
+      std::vector<DOUBLE_O_FLOAT>,
+      std::vector<int>,
+      std::vector<int>
+> Action_GIGist::calcGPUEnergy(const ActionFrame &frame) 
+{
   #ifdef CUDA
+  std::vector<DOUBLE_O_FLOAT> eww_result;
+  std::vector<DOUBLE_O_FLOAT> esw_result;
   std::vector<int> result_o{ std::vector<int>(4 * info_.system.numberAtoms) };
   std::vector<int> result_n{ std::vector<int>(info_.system.numberAtoms) };
   if (info_.gist.calcEnergy){
@@ -654,8 +641,8 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         result_O_c_,
         result_N_c_,
         info_.gist.doorder) };
-    eww_result = e_result.eww;
-    esw_result = e_result.esw;
+    eww_result = std::move(e_result.eww);
+    esw_result = std::move(e_result.esw);
 
     if (info_.gist.doorder) {
       int counter{ 0 };
@@ -671,7 +658,47 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
 
     tEnergy_.Stop();
   }
+  return { eww_result, esw_result, result_o, result_n };
+  #else
+    return {std::vector<DOUBLE_O_FLOAT>(), 
+      std::vector<DOUBLE_O_FLOAT>(),
+      std::vector<int>(),
+      std::vector<int>()};
   #endif
+}
+
+
+
+/**
+ * Starts the calculation of GIST. Can use either CUDA, OPENMP or single thread code.
+ * This function is actually way too long. Refactoring of this code might help with
+ * readability.
+ * @param frameNum: The number of the frame.
+ * @param frame: The frame itself.
+ * @return: Action::ERR on error, Action::OK if everything ran smoothly.
+ */
+Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
+
+  info_.system.nFrames++;
+  std::vector<DOUBLE_O_FLOAT> eww_result;
+  std::vector<DOUBLE_O_FLOAT> esw_result;
+  std::vector<std::vector<int> > order_indices{};
+
+  if (info_.gist.febiss && info_.system.nFrames == 1) {
+    this->writeOutSolute(frame);
+  }
+
+
+  if (info_.gist.useCOM && info_.system.nFrames == 1) 
+  {
+    prepQuaternion(frame);
+  }
+  // CUDA necessary information
+  auto energyResults = calcGPUEnergy(frame);
+
+  eww_result = std::move(std::get<0>(energyResults));
+  esw_result = std::move(std::get<1>(energyResults));
+
 
   std::vector<bool> onGrid(info_.system.numberAtoms);
   for (unsigned int i = 0; i < onGrid.size(); ++i) {
@@ -697,10 +724,9 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
 
       // If center of mass should be used, use this part.
       if (info_.gist.useCOM) {
-        int mol_begin{ mol->BeginAtom() };
-        int mol_end{ mol->EndAtom() };
-        com = calcCenterOfMass(mol_begin, mol_end, frame.Frm().XYZ(mol_begin)) ;
-        voxel = bin(mol_begin, mol_end, com, frame);
+        auto test = prepCom(*mol, frame);
+        com = std::get<0>(test);
+        voxel = std::get<1>(test);
       }
       
 
@@ -1468,7 +1494,7 @@ void Action_GIGist::writeDxFile(std::string name, const std::vector<double> &dat
  * @param coords: The current coordinates, on which processing occurs.
  * @return A vector, of class Vec3, holding the center of mass.
  */
-Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, const double *coords) {
+Vec3 Action_GIGist::calcCenterOfMass(int atom_begin, int atom_end, const double *coords) const {
   double mass{ 0.0 };
   double x{ 0.0 }, y{ 0.0 }, z{ 0.0 };
   for (int i = 0; i < (atom_end - atom_begin); ++i) {
