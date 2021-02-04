@@ -714,15 +714,19 @@ void Action_GIGist::Print() {
       dTSorient_norm          = dTSTest.at(1).at(voxel);
       dTStrans_norm           = dTSTest.at(0).at(voxel);
       dTSsix_norm             = dTSTest.at(2).at(voxel);
-      #else
-      dTSorient_norm          = this->calcOrientEntropy(voxel);
-      std::vector<double> dTS = this->calcTransEntropy(voxel);
-      dTStrans_norm           = dTS.at(0);
-      dTSsix_norm             = dTS.at(1);
-      #endif
       dTSorient_dens          = dTSorient_norm * pop / (this->nFrames_ * this->voxelVolume_);
       dTStrans_dens           = dTStrans_norm * pop / (this->nFrames_ * this->voxelVolume_);
       dTSsix_dens             = dTSsix_norm * pop / (this->nFrames_ * this->voxelVolume_);
+      #else
+      std::vector<double> dTS = this->calcOrientEntropy(voxel);
+      dTSorient_norm          = dTSorient.at(0);
+      dTSorient_dens          = dTSorient.at(1);
+      std::vector<double> dTS = this->calcTransEntropy(voxel);
+      dTStrans_norm           = dTS.at(0);
+      dTStrans_dens           = dTS.at(1);
+      dTSsix_norm             = dTS.at(2);
+      dTSsix_dens             = dTS.at(3);
+      #endif
       
       Esw_norm = this->result_.at(this->dict_.getIndex("Esw"))->operator[](voxel) / pop;
       Esw_dens = this->result_.at(this->dict_.getIndex("Esw"))->operator[](voxel) / (this->nFrames_ * this->voxelVolume_);
@@ -948,12 +952,14 @@ double Action_GIGist::calcVdWEnergy(double r_2_i, int a1, int a2) {
  * @argument voxel: The index of the voxel.
  * @return: The entropy of the water atoms in that voxel.
  */
-double Action_GIGist::calcOrientEntropy(int voxel) {
+std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
+  std::vector<double> ret(2);
   int nwtotal = this->result_.at(this->dict_.getIndex("population"))->operator[](voxel);
   if(nwtotal < 2) {
-    return 0;
+    return ret;
   }
-  double result = 0.0;
+  double dTSo_n{ 0.0 };
+  int water_count{ 0 };
   for (int n0 = 0; n0 < nwtotal; ++n0) {
     double NNr = 100000;
     for (int n1 = 0; n1 < nwtotal; ++n1) {
@@ -966,11 +972,16 @@ double Action_GIGist::calcOrientEntropy(int voxel) {
         NNr = rR;
       }
     }
-    if (NNr < 9999 && NNr > 0) {
-      result += log(NNr * NNr * NNr * nwtotal / (3.0 * Constants::TWOPI));
+    if (NNr < 99999 && NNr > 0) {
+      ++water_count;
+      dTSo_n += log(NNr * NNr * NNr / (3.0 * Constants::TWOPI));
     }
   }
-  return Constants::GASK_KCAL * this->temperature_ * (result / nwtotal + Constants::EULER_MASC);
+  dTSo_n += water_count * log(water_count);
+  dTSo_n = Constants::GASK_KCAL * this->temperature_ * (dTSo_n / water_count + Constants::EULER_MASC);
+  ret.at(0) = dTSo_n;
+  ret.at(1) = dTSo_n * water_count / (this->nFrames_ * this->voxelVolume_);
+  return ret;
 }
 
 /**
@@ -980,14 +991,19 @@ double Action_GIGist::calcOrientEntropy(int voxel) {
  *          entropy, as well as the six integral entropy.
  */
 std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
-  // Will hold the two values dTStrans and dTSsix
-  std::vector<double> ret;
-  ret.push_back(0);
-  ret.push_back(0);
+  // Will hold dTStrans (norm, dens) and dTSsix (norm, dens)
+  std::vector<double> ret(4);
+  // dTStrans uses all solvents => use nwtotal
+  // dTSsix does not use ions => count separately
   int nwtotal = (*this->result_.at(this->dict_.getIndex("population")))[voxel];
+  int nw_six{ 0 };
   for (int n0 = 0; n0 < nwtotal; ++n0) {
     double NNd = HUGE;
     double NNs = HUGE;
+    if ( this->quaternions_[voxel][n0].initialized() ) {
+        // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
+        ++nw_six;
+    }
     // Self is not migrated to the function, as it would need to have a check against self comparison
     // The need is not entirely true, as it would produce 0 as a value.
     for (int n1 = 0; n1 < nwtotal; ++n1) {
@@ -1032,6 +1048,8 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
     } else {
       ret.at(0) = 0;
       ret.at(1) = 0;
+      ret.at(2) = 0;
+      ret.at(3) = 0;
       return ret;
     }
     
@@ -1041,12 +1059,18 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       ret.at(0) += log(NNd * NNd * NNd * this->nFrames_ * 4 * Constants::PI * this->rho0_ / 3.0);
       // NNs is used to the power of 6, since it is already power of 2, only the third power
       // has to be calculated.
-      ret.at(1) += log(NNs * NNs * NNs * this->nFrames_ * Constants::PI * this->rho0_ / 48.0);
+      if ( this->quaternions_[voxel][n0].initialized() ) {
+        ret.at(2) += log(NNs * NNs * NNs * this->nFrames_ * Constants::PI * this->rho0_ / 48.0);
+      }
     }
   }
   if (ret.at(0) != 0) {
-    ret.at(0) = Constants::GASK_KCAL * this->temperature_ * (ret.at(0) / nwtotal + Constants::EULER_MASC);
-    ret.at(1) = Constants::GASK_KCAL * this->temperature_ * (ret.at(1) / nwtotal + Constants::EULER_MASC);
+    double dTSt_n{ Constants::GASK_KCAL * this->temperature_ * (ret.at(0) / nwtotal + Constants::EULER_MASC) };
+    ret.at(0) = dTSt_n;
+    ret.at(1) = dTSt_n * nwtotal / (this->nFrames_ * this->voxelVolume_);
+    double dTSs_n{ Constants::GASK_KCAL * this->temperature_ * (ret.at(2) / nw_six + Constants::EULER_MASC) };
+    ret.at(2) = dTSs_n;
+    ret.at(3) = dTSs_n * nw_six / (this->nFrames_ * this->voxelVolume_);
   }
   return ret;
 }
