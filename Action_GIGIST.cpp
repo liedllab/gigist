@@ -1119,7 +1119,7 @@ void Action_GIGist::Print() {
 
   
   mprintf("Writing output:\n");
-  this->datafile_->Printf("GIST calculation output. rho0 = %g, n_frames = %d\n", this->rho0_, this->nFrames_);
+  this->datafile_->Printf("GIST calculation output. rho0 = %g, n_frames = %d\n", info_.system.rho0, info_.system.nFrames);
   this->datafile_->Printf("   voxel        x          y          z         population     dTSt_d(kcal/mol)  dTSt_n(kcal/mol)"
                           "  dTSo_d(kcal/mol)  dTSo_n(kcal/mol)  dTSs_d(kcal/mol)  dTSs_n(kcal/mol)   "
                           "Esw_d(kcal/mol)   Esw_n(kcal/mol)   Eww_d(kcal/mol)   Eww_n(kcal/mol)    dipoleX    "
@@ -1306,9 +1306,9 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
     }
   }
   dTSo_n += water_count * log(water_count);
-  dTSo_n = Constants::GASK_KCAL * this->temperature_ * (dTSo_n / water_count + Constants::EULER_MASC);
+  dTSo_n = Constants::GASK_KCAL * info_.system.temperature * (dTSo_n / water_count + Constants::EULER_MASC);
   ret.at(0) = dTSo_n;
-  ret.at(1) = dTSo_n * water_count / (this->nFrames_ * this->voxelVolume_);
+  ret.at(1) = dTSo_n * water_count / (info_.system.nFrames * info_.grid.voxelVolume);
   return ret;
 }
 
@@ -1391,17 +1391,17 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       // NNs is used to the power of 6, since it is already power of 2, only the third power
       // has to be calculated.
       if ( this->quaternions_[voxel][n0].initialized() ) {
-        ret.at(2) += log(NNs * NNs * NNs * this->nFrames_ * Constants::PI * this->rho0_ / 48.0);
+        ret.at(2) += log(NNs * NNs * NNs * info_.system.nFrames * Constants::PI * info_.system.rho0 / 48.0);
       }
     }
   }
   if (ret.at(0) != 0) {
-    double dTSt_n{ Constants::GASK_KCAL * this->temperature_ * (ret.at(0) / nwtotal + Constants::EULER_MASC) };
+    double dTSt_n{ Constants::GASK_KCAL * info_.system.temperature * (ret.at(0) / nwtotal + Constants::EULER_MASC) };
     ret.at(0) = dTSt_n;
-    ret.at(1) = dTSt_n * nwtotal / (this->nFrames_ * this->voxelVolume_);
-    double dTSs_n{ Constants::GASK_KCAL * this->temperature_ * (ret.at(2) / nw_six + Constants::EULER_MASC) };
+    ret.at(1) = dTSt_n * nwtotal / (info_.system.nFrames * info_.grid.voxelVolume);
+    double dTSs_n{ Constants::GASK_KCAL * info_.system.temperature * (ret.at(2) / nw_six + Constants::EULER_MASC) };
     ret.at(2) = dTSs_n;
-    ret.at(3) = dTSs_n * nw_six / (this->nFrames_ * this->voxelVolume_);
+    ret.at(3) = dTSs_n * nw_six / (info_.system.nFrames * info_.grid.voxelVolume);
   }
   return ret;
 }
