@@ -516,7 +516,7 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
 
 
 
-Action_GIGist::TestObj Action_GIGist::calcBoxParameters(ActionFrame &frame)
+Action_GIGist::TestObj Action_GIGist::calcBoxParameters(const ActionFrame &frame)
 {
   Matrix_3x3 ucell_m{}, recip_m{};
   std::unique_ptr<float[]> recip;
@@ -608,6 +608,7 @@ std::tuple<std::vector<DOUBLE_O_FLOAT>,
 > Action_GIGist::calcGPUEnergy(const ActionFrame &frame) 
 {
   #ifdef CUDA
+  tEnergy_.Start();
   std::vector<DOUBLE_O_FLOAT> eww_result;
   std::vector<DOUBLE_O_FLOAT> esw_result;
   std::vector<int> result_o{ std::vector<int>(4 * info_.system.numberAtoms) };
@@ -644,6 +645,8 @@ std::tuple<std::vector<DOUBLE_O_FLOAT>,
     eww_result = std::move(e_result.eww);
     esw_result = std::move(e_result.esw);
 
+    std::vector<std::vector<int>> order_indices{};
+
     if (info_.gist.doorder) {
       int counter{ 0 };
       for (int i = 0; i < (4 * info_.system.numberAtoms); i += 4) {
@@ -660,10 +663,10 @@ std::tuple<std::vector<DOUBLE_O_FLOAT>,
   }
   return { eww_result, esw_result, result_o, result_n };
   #else
-    return {std::vector<DOUBLE_O_FLOAT>(), 
-      std::vector<DOUBLE_O_FLOAT>(),
-      std::vector<int>(),
-      std::vector<int>()};
+  return {std::vector<DOUBLE_O_FLOAT>(), 
+    std::vector<DOUBLE_O_FLOAT>(),
+    std::vector<int>(),
+    std::vector<int>()};
   #endif
 }
 
@@ -688,22 +691,24 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
     this->writeOutSolute(frame);
   }
 
-
   if (info_.gist.useCOM && info_.system.nFrames == 1) 
   {
     prepQuaternion(frame);
   }
+
   // CUDA necessary information
+  #ifdef CUDA
+
   auto energyResults = calcGPUEnergy(frame);
 
   eww_result = std::move(std::get<0>(energyResults));
   esw_result = std::move(std::get<1>(energyResults));
+  #endif
 
-
-  std::vector<bool> onGrid(info_.system.numberAtoms);
-  for (unsigned int i = 0; i < onGrid.size(); ++i) {
+  std::vector<bool> onGrid(info_.system.numberAtoms, false);
+  /*for (unsigned int i = 0; i < onGrid.size(); ++i) {
     onGrid.at(i) = false;
-  }
+  }*/
 
   #if defined _OPENMP && defined CUDA
   tHead_.Start();
@@ -870,7 +875,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         #pragma omp critical
         {
         #endif
-        result_.at(dict_.getIndex("neighbour"))->UpdateVoxel(voxel, result_n.at(mol->BeginAtom() + headAtomIndex));
+        result_.at(dict_.getIndex("neighbour"))->UpdateVoxel(voxel, std::get<3>(energyResults).at(mol->BeginAtom() + headAtomIndex));
         #ifdef _OPENMP
         }
         #endif
@@ -1617,7 +1622,7 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
       else
       {
         double angleCos{ (X * (coord - com)) / (X.Length() * (coord - com).Length()) };
-        if ( angleCos <= 0.9 && angleCos >= 0.3)
+        if ( angleCos <= 0.8 && angleCos >= -0.8 )
         {
           indices.push_back(i);
           return indices;
@@ -1644,7 +1649,7 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
           }
           else {
             double angleCos{ (X * (coord - com)) / (X.Length() * (coord - com).Length()) };
-            if ( angleCos <= 0.9 && angleCos >= 0.3)
+            if ( angleCos <= 0.8 && angleCos >= -0.8 )
             {
                 indices.push_back(i);
                 return indices;
