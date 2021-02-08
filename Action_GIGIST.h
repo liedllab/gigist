@@ -240,7 +240,7 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 950
-  double calcOrientEntropy(int);
+  std::vector<double> calcOrientEntropy(int);
 
   // In: Action_GIGIST.cpp
   // line: 981
