@@ -311,7 +311,7 @@ private:
   );
   void prepDensityGrids();
   void prepQuaternion(ActionFrame &frame);
-  TestObj calcBoxParameters(ActionFrame &frame);
+  TestObj calcBoxParameters(const ActionFrame &frame);
   void calcHVectors(
     int voxel,
     int headAtomIndex,
