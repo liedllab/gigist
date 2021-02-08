@@ -718,7 +718,7 @@ void Action_GIGist::Print() {
       dTStrans_dens           = dTStrans_norm * pop / (this->nFrames_ * this->voxelVolume_);
       dTSsix_dens             = dTSsix_norm * pop / (this->nFrames_ * this->voxelVolume_);
       #else
-      std::vector<double> dTS = this->calcOrientEntropy(voxel);
+      std::vector<double> dTSorient = this->calcOrientEntropy(voxel);
       dTSorient_norm          = dTSorient.at(0);
       dTSorient_dens          = dTSorient.at(1);
       std::vector<double> dTS = this->calcTransEntropy(voxel);
@@ -777,7 +777,7 @@ void Action_GIGist::Print() {
 
   
   mprintf("Writing output:\n");
-  this->datafile_->Printf("GIST calculation output.\n");
+  this->datafile_->Printf("GIST calculation output. rho0 = %g, n_frames = %d\n", this->rho0_, this->nFrames_);
   this->datafile_->Printf("   voxel        x          y          z         population     dTSt_d(kcal/mol)  dTSt_n(kcal/mol)"
                           "  dTSo_d(kcal/mol)  dTSo_n(kcal/mol)  dTSs_d(kcal/mol)  dTSs_n(kcal/mol)   "
                           "Esw_d(kcal/mol)   Esw_n(kcal/mol)   Eww_d(kcal/mol)   Eww_n(kcal/mol)    dipoleX    "

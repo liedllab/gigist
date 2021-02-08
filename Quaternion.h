@@ -271,6 +271,11 @@ public:
     #endif
   }
 
+  bool initialized() const noexcept
+  {
+    return !(w_ == 0.0 && x_ == 0.0 && y_ == 0.0 && z_ == 0.0);
+  }
+
 private:
   T w_;
   T x_;
