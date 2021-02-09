@@ -180,7 +180,22 @@ public:
    * @param idx: The index to access;
    * @return: The element stored at index, starting with w.
    */
-  T operator[](int idx) {
+  T& operator[](int idx) {
+    switch (idx) {
+      case 0:
+        return w_;
+      case 1:
+        return x_;
+      case 2:
+        return y_;
+      case 3:
+        return z_;
+      default:
+        throw IndexOutOfRangeException();
+    }
+  }
+
+  const T& operator[](int idx) const {
     switch (idx) {
       case 0:
         return w_;
@@ -217,7 +232,7 @@ public:
    * @param other: The second quaternion.
    * @return: A new quaternion holding the result of the multiplication.
    */
-  Quaternion<T> operator*(Quaternion<T> other) {
+  Quaternion<T> operator*(Quaternion<T> other) const {
     T w = this->w_ * other.W() - this->x_ * other.X() - this->y_ * other.Y() - this->z_ * other.Z();
     T x = this->w_ * other.X() + this->x_ * other.W() + this->y_ * other.Z() - this->z_ * other.Y();
     T y = this->w_ * other.Y() - this->x_ * other.Z() + this->y_ * other.W() + this->z_ * other.X();
@@ -229,7 +244,7 @@ public:
    * Invert the Quaternion, creating a Quaternion with the exact inverse rotation.
    * @return: A new quaternion holding the roation in the other direction.
    */
-  Quaternion<T> invert( void ) {
+  Quaternion<T> invert( void ) const {
     return Quaternion<T>( this->w_, this->x_ * -1, this->y_ * -1, this->z_ * -1);
   }
 
@@ -250,7 +265,7 @@ public:
    * @return: The difference in the rotation described by the
    *          quaternions, as an angle.
    */
-  T distance(Quaternion<T> other) {
+  T distance(Quaternion<T> other) const {
     return 2.0 * acos(fabs(this->w_ * other.W() + 
                       this->x_ * other.X() +
                       this->y_ * other.Y() +
@@ -263,7 +278,7 @@ public:
    * @param vector: The vector to be rotated.
    * @return: The transformed vector.
    */
-  Vec3 rotate(Vec3 vector) {
+  Vec3 rotate(Vec3 vector) const {
 
     Quaternion<T> vecQuat(0, vector[0], vector[1], vector[2]);
     vecQuat = *this * vecQuat;
