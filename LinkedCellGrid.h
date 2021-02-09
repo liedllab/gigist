@@ -151,7 +151,7 @@ public:
                 throw std::out_of_range("Inner Index is out of range, consider using iterators.");
             idx--;
         }
-        return std::get<T>(m_data.at(next));
+        return std::get<1>(m_data.at(next));
     }
 
     size_t getSize() const
