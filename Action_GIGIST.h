@@ -46,6 +46,7 @@
 #include "Timer.h"
 #include "Quaternion.h"
 #include "ExceptionsGIST.h"
+#include "LinkedCellGrid.h"
 
 
 #ifdef CUDA
@@ -460,7 +461,7 @@ private:
   std::vector<DataSet_3D*> result_;
   std::vector<std::vector<double> > resultV_;
 
-  std::vector<std::vector<Quaternion<DOUBLE_O_FLOAT> > > quaternions_;
+  LinkedCellGrid<Quaternion<DOUBLE_O_FLOAT> > quaternions_;
   std::vector<DOUBLE_O_FLOAT> charges_;
   std::vector<int> molecule_;
   std::vector<int> atomTypes_;
