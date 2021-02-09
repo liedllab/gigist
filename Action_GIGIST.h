@@ -474,7 +474,7 @@ private:
   std::unique_ptr<bool []> solvent_;
   // FEBISS related variables
 
-  std::vector<std::vector<Vec3> > waterCoordinates_;
+  LinkedCellGrid<Vec3> waterCoordinates_;
   std::vector<std::vector<Vec3>> hVectors_;
   std::map<double, std::vector<int>> shellcontainer_;
   std::vector<double> shellcontainerKeys_;

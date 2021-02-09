@@ -253,7 +253,7 @@ void Action_GIGist::resizeVectors()
     hVectors_.resize( info_.grid.nVoxels );
   }
   quaternions_.resize(info_.grid.nVoxels, info_.system.numberSolvent * info_.system.nFrames);
-  waterCoordinates_.resize(info_.grid.nVoxels);
+  waterCoordinates_.resize(info_.grid.nVoxels, info_.system.numberSolvent * info_.system.nFrames);
 }
 
 /*****
@@ -1338,7 +1338,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       if (n1 == n0) {
         continue;
       }
-      double dd{ (waterCoordinates_.at(voxel).at(n0) - waterCoordinates_.at(voxel).at(n1)).Magnitude2() };
+      double dd{ (waterCoordinates_.at(voxel, n0) - waterCoordinates_.at(voxel, n1)).Magnitude2() };
       if (dd > Constants::SMALL && dd < NNd) {
         NNd = dd;
       }
@@ -1423,7 +1423,7 @@ void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double 
     if (voxel1 == voxel2 && n0 == n1) {
       continue;
     }
-    double dd{ (waterCoordinates_.at(voxel1).at(n0) - waterCoordinates_.at(voxel2).at(n1)).Magnitude2() };
+    double dd{ (waterCoordinates_.at(voxel1, 0) - waterCoordinates_.at(voxel2, n1)).Magnitude2() };
     if (dd > Constants::SMALL && dd < NNd) {
       NNd = dd;
     }
@@ -1531,7 +1531,7 @@ int Action_GIGist::bin(int begin, int end, const Vec3 &vec, const ActionFrame &f
     
     // Does not necessarily need this in this function
     try {
-      waterCoordinates_.at(voxel).push_back(vec);
+      waterCoordinates_.push_back(voxel, vec);
     } catch (std::out_of_range e)
     {
       std::cout << info_.system.nFrames << '\n';
