@@ -127,12 +127,12 @@ public:
         m_data.reserve(numberDataPoints);
     }
 
-    auto       begin()        { return OuterIterator( &m_startIndices[0], *this);  }
-    const auto begin()  const { return OuterIterator( &m_startIndices[0], *this);  }
-    const auto cbegin() const { return OuterIterator( &m_startIndices[0], *this); }
-    auto       end()          { return OuterIterator( &m_startIndices[m_startIndices.size()], *this);    }
-    const auto end()    const { return OuterIterator( &m_startIndices[m_startIndices.size()], *this);    }
-    const auto cend()   const { return OuterIterator( &m_startIndices[m_startIndices.size()], *this);   }
+    OuterIterator       begin()        { return OuterIterator( &m_startIndices[0], *this);  }
+    const OuterIterator begin()  const { return OuterIterator( &m_startIndices[0], *this);  }
+    const OuterIterator cbegin() const { return OuterIterator( &m_startIndices[0], *this); }
+    OuterIterator       end()          { return OuterIterator( &m_startIndices[m_startIndices.size()], *this);    }
+    const OuterIterator end()    const { return OuterIterator( &m_startIndices[m_startIndices.size()], *this);    }
+    const OuterIterator cend()   const { return OuterIterator( &m_startIndices[m_startIndices.size()], *this);   }
 
 
     void resize(int size, int numberDataPoints)
