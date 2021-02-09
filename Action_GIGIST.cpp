@@ -1531,7 +1531,14 @@ int Action_GIGist::bin(int begin, int end, const Vec3 &vec, const ActionFrame &f
     
     // Does not necessarily need this in this function
     try {
+      #ifdef _OPENMP
+      #pragma omp critical
+      {
+      #endif
       waterCoordinates_.push_back(voxel, vec);
+      #ifdef _OPENMP
+      }
+      #endif
     } catch (std::out_of_range e)
     {
       std::cout << info_.system.nFrames << '\n';
