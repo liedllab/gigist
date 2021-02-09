@@ -252,7 +252,7 @@ void Action_GIGist::resizeVectors()
   if (info_.gist.febiss) {
     hVectors_.resize( info_.grid.nVoxels );
   }
-  quaternions_.resize(info_.grid.nVoxels);
+  quaternions_.resize(info_.grid.nVoxels, info_.system.numberSolvent * info_.system.nFrames);
   waterCoordinates_.resize(info_.grid.nVoxels);
 }
 
@@ -809,7 +809,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           #pragma omp critical
           {
           #endif
-          quaternions_.at(voxel).push_back(quat);
+          quaternions_.push_back(voxel, quat);
           #ifdef _OPENMP
           }
           #endif
@@ -1291,10 +1291,10 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
         continue;
       }
 
-     if ( quaternions_.at(voxel).at(n0).initialized() &&
-		      quaternions_.at(voxel).at(n1).initialized() )
+     if ( quaternions_.at(voxel, n0).initialized() &&
+		      quaternions_.at(voxel, n1).initialized() )
      {
-      	double rR{ quaternions_.at(voxel).at(n0).distance(quaternions_.at(voxel).at(n1)) };
+      	double rR{ quaternions_.at(voxel, n0).distance(quaternions_.at(voxel, n1)) };
       	if ( (rR < NNr) && (rR > 0.0) ) {
         	NNr = rR;
       	}
@@ -1328,7 +1328,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
   for (int n0 = 0; n0 < nwtotal; ++n0) {
     double NNd = HUGE;
     double NNs = HUGE;
-    if ( this->quaternions_[voxel][n0].initialized() ) {
+    if ( this->quaternions_.at( voxel, n0 ).initialized() ) {
         // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
         ++nw_six;
     }
@@ -1342,10 +1342,10 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       if (dd > Constants::SMALL && dd < NNd) {
         NNd = dd;
       }
-      if ( quaternions_.at(voxel).at(n0).initialized() &&
-		      quaternions_.at(voxel).at(n1).initialized() )
+      if ( quaternions_.at(voxel, n0).initialized() &&
+		      quaternions_.at(voxel, n1).initialized() )
       {
-      	double rR{ quaternions_.at(voxel).at(n0).distance(quaternions_.at(voxel).at(n1)) };
+      	double rR{ quaternions_.at(voxel, n0).distance(quaternions_.at(voxel, n1)) };
       	double ds{ rR * rR + dd };
       	if (ds < NNs && ds > Constants::SMALL) {
         	NNs = ds;
@@ -1390,7 +1390,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       ret.at(0) += log(NNd * NNd * NNd * info_.system.nFrames * 4 * Constants::PI * info_.system.rho0 / 3.0);
       // NNs is used to the power of 6, since it is already power of 2, only the third power
       // has to be calculated.
-      if ( this->quaternions_[voxel][n0].initialized() ) {
+      if ( quaternions_.at( voxel, n0 ).initialized() ) {
         ret.at(2) += log(NNs * NNs * NNs * info_.system.nFrames * Constants::PI * info_.system.rho0 / 48.0);
       }
     }
@@ -1427,10 +1427,10 @@ void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double 
     if (dd > Constants::SMALL && dd < NNd) {
       NNd = dd;
     }
-    if (quaternions_.at(voxel1).at(n0).initialized() &&
-		    quaternions_.at(voxel2).at(n1).initialized())
+    if (quaternions_.at(voxel1, n0).initialized() &&
+		    quaternions_.at(voxel2, n1).initialized())
     {
-      double rR{ quaternions_.at(voxel1).at(n0).distance(quaternions_.at(voxel2).at(n1)) };
+      double rR{ quaternions_.at(voxel1, n0).distance(quaternions_.at(voxel2, n1)) };
       double ds{ rR * rR + dd };
       if (ds < NNs && ds > 0) {
         NNs = ds;
