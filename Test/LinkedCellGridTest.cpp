@@ -45,9 +45,9 @@ TEST(LinkedCellGrid, PushBackTest)
         for (auto j : i)
         {
             if (i.getIndex() == 0) {
-                results.push_back( std::get<1>(j) );
+                results.push_back( j );
             } else {
-                results2.push_back( std::get<1>(j) );
+                results2.push_back( j );
             }
         }
     }
