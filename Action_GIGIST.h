@@ -260,7 +260,7 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 1064
-  void calcTransEntropyDist(int, int, const std::pair<Vec3, Quaternion<double>>&, double &, double &);
+  void calcTransEntropyDist(int, int, const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>&, double &, double &);
 
   // In: Action_GIGIST.cpp
   // line: 1082

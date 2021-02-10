@@ -1327,7 +1327,7 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
   // dTSsix does not use ions => count separately
   int nwtotal = (*this->result_.at(this->dict_.getIndex("population")))[voxel];
   int nw_six{ 0 };
-  for (std::pair<Vec3, Quaternion<double>> quat : centersAndRotations_.at(voxel)) {
+  for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat : centersAndRotations_.at(voxel)) {
     double NNd = HUGE;
     double NNs = HUGE;
     if ( quat.second.initialized() ) {
@@ -1336,7 +1336,7 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
     }
     // Self is not migrated to the function, as it would need to have a check against self comparison
     // The need is not entirely true, as it would produce 0 as a value.
-    for (std::pair<Vec3, Quaternion<double>> quat2 : centersAndRotations_.at(voxel)) {
+    for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat2 : centersAndRotations_.at(voxel)) {
       if (!(quat.first != quat2.first) && quat.second == quat2.second) {
         continue;
       }
@@ -1419,11 +1419,11 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
  * @param NNs: The lowest distance in angular space. If the calculated
  *                one is smaller, saves it here.
  */
-void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, const std::pair<Vec3, Quaternion<double>>& quat, double &NNd, double &NNs) {
+void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>& quat, double &NNd, double &NNs) {
   int nSolvV2{ static_cast<int>( (*result_.at(dict_.getIndex("population")))[voxel2] ) };
   if (voxel1 == voxel2)
     return;
-  for (std::pair<Vec3, Quaternion<double>> quat2 : centersAndRotations_.at(voxel2)) {
+  for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat2 : centersAndRotations_.at(voxel2)) {
     // if (voxel1 == voxel2 && !(quat.first != quat2.first) && quat.second == quat2.second) {
     //   continue;
     // }
