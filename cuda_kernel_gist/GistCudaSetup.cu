@@ -147,7 +147,6 @@ EnergyReturn doActionCudaEnergy(const double *coords, int *NBindex_c, int ntypes
   }
 
   // vectors that will return the necessary information.
-  std::vector<std::vector<float> > result;
   std::vector<float> result_esw;
   std::vector<float> result_eww;
 

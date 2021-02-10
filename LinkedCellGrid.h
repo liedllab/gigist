@@ -47,8 +47,8 @@ public:
         {}
 
 
-        reference operator*() const { return m_parent->m_data.at(m_current); }
-        pointer operator->() { return &m_parent->m_data.at(m_current); }
+        T& operator*() const { return m_parent->m_data.at(m_current).second; }
+        T* operator->() { return &m_parent->m_data.at(m_current).second; }
 
         InnerIterator& operator++() 
         { 
@@ -141,6 +141,9 @@ public:
         m_startIndices.resize(size, -1);
         m_endIndices.resize(size, -1);
     }
+
+    OuterIterator       at(int gridVoxel)       { return OuterIterator( &m_startIndices[gridVoxel], *this ); }
+    const OuterIterator at(int gridVoxel) const { return OuterIterator( &m_startIndices[gridVoxel], *this ); }
 
     const T& at(int gridIdx, int idx) const
     {

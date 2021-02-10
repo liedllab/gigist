@@ -252,15 +252,15 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 950
-  std::vector<double> calcOrientEntropy(int);
+  std::array<double, 2> calcOrientEntropy(int);
 
   // In: Action_GIGIST.cpp
   // line: 981
-  std::vector<double> calcTransEntropy(int);
+  std::array<double, 4> calcTransEntropy(int);
 
   // In: Action_GIGIST.cpp
   // line: 1064
-  void calcTransEntropyDist(int, int, int, double &, double &);
+  void calcTransEntropyDist(int, int, const std::pair<Vec3, Quaternion<double>>&, double &, double &);
 
   // In: Action_GIGIST.cpp
   // line: 1082
@@ -318,11 +318,12 @@ private:
     int headAtomIndex,
     const std::vector<Vec3> &molAtomCoords);
   std::tuple<Vec3, int> prepCom(const Molecule& mol, const ActionFrame& frame);
-  std::tuple<std::vector<DOUBLE_O_FLOAT>, 
-      std::vector<DOUBLE_O_FLOAT>,
-      std::vector<int>,
-      std::vector<int>
-> calcGPUEnergy(const ActionFrame &frame);
+  std::tuple<
+    std::vector<DOUBLE_O_FLOAT>, 
+    std::vector<DOUBLE_O_FLOAT>,
+    std::vector<int>,
+    std::vector<int>
+  > calcGPUEnergy(const ActionFrame &frame);
 
   // Functions defined for FEBISS implementation
 
@@ -461,7 +462,7 @@ private:
   std::vector<DataSet_3D*> result_;
   std::vector<std::vector<double> > resultV_;
 
-  LinkedCellGrid<Quaternion<DOUBLE_O_FLOAT> > quaternions_;
+  LinkedCellGrid<std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT> > > centersAndRotations_;
   std::vector<DOUBLE_O_FLOAT> charges_;
   std::vector<int> molecule_;
   std::vector<int> atomTypes_;
@@ -477,7 +478,6 @@ private:
   int nSoluteAtoms_ = 0;
   double idealWaterAngle_ = 104.57;
 
-  LinkedCellGrid<Vec3> waterCoordinates_;
   std::vector<std::vector<Vec3>> hVectors_;
   std::map<double, std::vector<int>> shellcontainer_;
   std::vector<double> shellcontainerKeys_;
