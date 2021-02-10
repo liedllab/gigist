@@ -252,8 +252,7 @@ void Action_GIGist::resizeVectors()
   if (info_.gist.febiss) {
     hVectors_.resize( info_.grid.nVoxels );
   }
-  quaternions_.resize(info_.grid.nVoxels, info_.system.numberSolvent * info_.system.nFrames);
-  waterCoordinates_.resize(info_.grid.nVoxels, info_.system.numberSolvent * info_.system.nFrames);
+  centersAndRotations_.resize(info_.grid.nVoxels, info_.system.numberSolvent * info_.system.nFrames);
 }
 
 /*****
@@ -611,8 +610,8 @@ std::tuple<std::vector<DOUBLE_O_FLOAT>,
   tEnergy_.Start();
   std::vector<DOUBLE_O_FLOAT> eww_result;
   std::vector<DOUBLE_O_FLOAT> esw_result;
-  std::vector<int> result_o{ std::vector<int>(4 * info_.system.numberAtoms) };
-  std::vector<int> result_n{ std::vector<int>(info_.system.numberAtoms) };
+  std::vector<int> result_o( 4 * info_.system.numberAtoms );
+  std::vector<int> result_n( info_.system.numberAtoms );
   if (info_.gist.calcEnergy){
     auto boxParams{ calcBoxParameters(frame) };
 
@@ -683,8 +682,8 @@ std::tuple<std::vector<DOUBLE_O_FLOAT>,
 Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
 
   info_.system.nFrames++;
-  std::vector<DOUBLE_O_FLOAT> eww_result;
-  std::vector<DOUBLE_O_FLOAT> esw_result;
+  std::vector<DOUBLE_O_FLOAT> eww_result{};
+  std::vector<DOUBLE_O_FLOAT> esw_result{};
   std::vector<std::vector<int> > order_indices{};
 
   if (info_.gist.febiss && info_.system.nFrames == 1) {
@@ -726,11 +725,13 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       int voxel{ -1 };
       std::vector<Vec3> molAtomCoords{};
       Vec3 com{ 0, 0, 0 };
+      Vec3 coord{ 0, 0, 0 };
 
       // If center of mass should be used, use this part.
       if (info_.gist.useCOM) {
         auto test = prepCom(*mol, frame);
         com = std::get<0>(test);
+        coord = com;
         voxel = std::get<1>(test);
       }
       
@@ -751,6 +752,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
             // Try to bin atom1 onto the grid. If it is possible, get the index and keep working,
             // if not, calculate the energies between all atoms to this point.
             voxel = bin(mol->BeginAtom(), mol->EndAtom(), vec, frame);
+            coord = vec;
             headAtomIndex = atom1 - mol->BeginAtom();
             first = false;
           } else {
@@ -809,7 +811,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           #pragma omp critical
           {
           #endif
-          quaternions_.push_back(voxel, quat);
+          centersAndRotations_.push_back(voxel, {coord, quat});
           #ifdef _OPENMP
           }
           #endif
@@ -1058,10 +1060,10 @@ void Action_GIGist::Print() {
       dTStrans_dens           = dTStrans_norm * pop / (this->nFrames_ * this->voxelVolume_);
       dTSsix_dens             = dTSsix_norm * pop / (this->nFrames_ * this->voxelVolume_);
       #else
-      std::vector<double> dTSorient = this->calcOrientEntropy(voxel);
+      std::array<double, 2> dTSorient = calcOrientEntropy(voxel);
       dTSorient_norm          = dTSorient.at(0);
       dTSorient_dens          = dTSorient.at(1);
-      std::vector<double> dTS = this->calcTransEntropy(voxel);
+      std::array<double, 4> dTS = calcTransEntropy(voxel);
       dTStrans_norm           = dTS.at(0);
       dTStrans_dens           = dTS.at(1);
       dTSsix_norm             = dTS.at(2);
@@ -1276,25 +1278,25 @@ double Action_GIGist::calcVdWEnergy(double r_2_i, int a1, int a2) {
  * @param voxel: The index of the voxel.
  * @return: The entropy of the water molecules in that voxel.
  */
-std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
-  std::vector<double> ret(2);
+std::array<double, 2> Action_GIGist::calcOrientEntropy(int voxel) {
+  std::array<double, 2> ret{};
   int nwtotal = this->result_.at(this->dict_.getIndex("population"))->operator[](voxel);
   if(nwtotal < 2) {
     return ret;
   }
   double dTSo_n{ 0.0 };
   int water_count{ 0 };
-  for (int n0 = 0; n0 < nwtotal; ++n0) {
+  for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat : centersAndRotations_.at(voxel)) {
     double NNr{ 100000.0 };
-    for (int n1 = 0; n1 < nwtotal; ++n1) {
-      if (n1 == n0) {
+    for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat2 : centersAndRotations_.at(voxel)) {
+      if (quat.second == quat2.second) {
         continue;
       }
 
-     if ( quaternions_.at(voxel, n0).initialized() &&
-		      quaternions_.at(voxel, n1).initialized() )
+     if ( quat.second.initialized() &&
+		      quat2.second.initialized() )
      {
-      	double rR{ quaternions_.at(voxel, n0).distance(quaternions_.at(voxel, n1)) };
+      	double rR{ quat.second.distance(quat2.second) };
       	if ( (rR < NNr) && (rR > 0.0) ) {
         	NNr = rR;
       	}
@@ -1318,34 +1320,34 @@ std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
  * @return: A vector type object, holding the values for the translational
  *          entropy, as well as the six integral entropy.
  */
-std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
+std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
   // Will hold dTStrans (norm, dens) and dTSsix (norm, dens)
-  std::vector<double> ret(4);
+  std::array<double, 4> ret{};
   // dTStrans uses all solvents => use nwtotal
   // dTSsix does not use ions => count separately
   int nwtotal = (*this->result_.at(this->dict_.getIndex("population")))[voxel];
   int nw_six{ 0 };
-  for (int n0 = 0; n0 < nwtotal; ++n0) {
+  for (std::pair<Vec3, Quaternion<double>> quat : centersAndRotations_.at(voxel)) {
     double NNd = HUGE;
     double NNs = HUGE;
-    if ( this->quaternions_.at( voxel, n0 ).initialized() ) {
+    if ( quat.second.initialized() ) {
         // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
         ++nw_six;
     }
     // Self is not migrated to the function, as it would need to have a check against self comparison
     // The need is not entirely true, as it would produce 0 as a value.
-    for (int n1 = 0; n1 < nwtotal; ++n1) {
-      if (n1 == n0) {
+    for (std::pair<Vec3, Quaternion<double>> quat2 : centersAndRotations_.at(voxel)) {
+      if (!(quat.first != quat2.first) && quat.second == quat2.second) {
         continue;
       }
-      double dd{ (waterCoordinates_.at(voxel, n0) - waterCoordinates_.at(voxel, n1)).Magnitude2() };
+      double dd{ (quat.first - quat2.first).Magnitude2() };
       if (dd > Constants::SMALL && dd < NNd) {
         NNd = dd;
       }
-      if ( quaternions_.at(voxel, n0).initialized() &&
-		      quaternions_.at(voxel, n1).initialized() )
+      if ( quat.second.initialized() &&
+		      quat2.second.initialized() )
       {
-      	double rR{ quaternions_.at(voxel, n0).distance(quaternions_.at(voxel, n1)) };
+      	double rR{ quat.second.distance(quat2.second) };
       	double ds{ rR * rR + dd };
       	if (ds < NNs && ds > Constants::SMALL) {
         	NNs = ds;
@@ -1370,7 +1372,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
             int voxel2{ voxel + dim1 * static_cast<int>( step[0] ) + dim2 * static_cast<int>( step[1] ) + dim3 * static_cast<int>( step[2] ) };
             // Checks if the voxel2 is the same as voxel, if so, has already been calculated
             if (voxel2 != voxel) {
-              calcTransEntropyDist(voxel, voxel2, n0, NNd, NNs);
+              calcTransEntropyDist(voxel, voxel2, quat, NNd, NNs);
             }
           }
         }
@@ -1390,7 +1392,7 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
       ret.at(0) += log(NNd * NNd * NNd * info_.system.nFrames * 4 * Constants::PI * info_.system.rho0 / 3.0);
       // NNs is used to the power of 6, since it is already power of 2, only the third power
       // has to be calculated.
-      if ( quaternions_.at( voxel, n0 ).initialized() ) {
+      if ( quat.second.initialized() ) {
         ret.at(2) += log(NNs * NNs * NNs * info_.system.nFrames * Constants::PI * info_.system.rho0 / 48.0);
       }
     }
@@ -1417,20 +1419,22 @@ std::vector<double> Action_GIGist::calcTransEntropy(int voxel) {
  * @param NNs: The lowest distance in angular space. If the calculated
  *                one is smaller, saves it here.
  */
-void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, int n0, double &NNd, double &NNs) {
+void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, const std::pair<Vec3, Quaternion<double>>& quat, double &NNd, double &NNs) {
   int nSolvV2{ static_cast<int>( (*result_.at(dict_.getIndex("population")))[voxel2] ) };
-  for (int n1 = 0; n1 < nSolvV2; ++n1) {
-    if (voxel1 == voxel2 && n0 == n1) {
-      continue;
-    }
-    double dd{ (waterCoordinates_.at(voxel1, 0) - waterCoordinates_.at(voxel2, n1)).Magnitude2() };
+  if (voxel1 == voxel2)
+    return;
+  for (std::pair<Vec3, Quaternion<double>> quat2 : centersAndRotations_.at(voxel2)) {
+    // if (voxel1 == voxel2 && !(quat.first != quat2.first) && quat.second == quat2.second) {
+    //   continue;
+    // }
+    double dd{ (quat.first - quat2.first).Magnitude2() };
     if (dd > Constants::SMALL && dd < NNd) {
       NNd = dd;
     }
-    if (quaternions_.at(voxel1, n0).initialized() &&
-		    quaternions_.at(voxel2, n1).initialized())
+    if (quat.second.initialized() &&
+		    quat2.second.initialized())
     {
-      double rR{ quaternions_.at(voxel1, n0).distance(quaternions_.at(voxel2, n1)) };
+      double rR{ quat.second.distance(quat2.second) };
       double ds{ rR * rR + dd };
       if (ds < NNs && ds > 0) {
         NNs = ds;
@@ -1529,21 +1533,7 @@ int Action_GIGist::bin(int begin, int end, const Vec3 &vec, const ActionFrame &f
   {
     voxel = result_.at(dict_.getIndex("population"))->CalcIndex(bin_i, bin_j, bin_k);
     
-    // Does not necessarily need this in this function
-    try {
-      #ifdef _OPENMP
-      #pragma omp critical
-      {
-      #endif
-      waterCoordinates_.push_back(voxel, vec);
-      #ifdef _OPENMP
-      }
-      #endif
-    } catch (std::out_of_range e)
-    {
-      std::cout << info_.system.nFrames << '\n';
-      throw e;
-    }
+    
 
     #ifdef _OPENMP
     #pragma omp critical
