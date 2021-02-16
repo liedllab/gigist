@@ -1619,7 +1619,7 @@ std::vector<int> Action_GIGist::calcQuaternionIndices(int begin, int end, const 
       else
       {
         double angleCos{ (X * (coord - com)) / (X.Length() * (coord - com).Length()) };
-        if ( angleCos <= 0.8 && angleCos >= -0.8 )
+        if ( angleCos <= 0.95 && angleCos >= -0.95 )
         {
           indices.push_back(i);
           return indices;
