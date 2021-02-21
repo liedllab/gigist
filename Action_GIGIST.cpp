@@ -51,8 +51,8 @@ void Action_GIGist::Help() const {
           "    <temp 300>                 Defines the temperature of the simulation.\n"
           "    <gridspacn 0.5>            Defines the grid spacing\n"
           "    <refdens 0.0329>           Defines the reference density for the water model.\n"
-          "    febiss                     Activates FEBISS placement (only for water)\n"
-          "    <out \"out.dat\">            Defines the name of the output file.\n"
+          "    <febiss 104.57>            Activates FEBISS placement with given ideal water angle (only available for water)\n"
+          "    <out \"out.dat\">          Defines the name of the output file.\n"
           "    <dx>                       Set to write out dx files. Population is always written.\n"
 
           "  The griddimensions must be set in integer values and have to be larger than 0.\n"
@@ -96,6 +96,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
   this->voxelSize_ = argList.getKeyDouble("gridspacn", 0.5);
   this->voxelVolume_ = this->voxelSize_ * this->voxelSize_ * this->voxelSize_;
   this->rho0_ = argList.getKeyDouble("refdens", 0.0329);
+  this->idealWaterAngle_ = argList.getKeyDouble("febiss", 104.57);
   this->forceStart_ = argList.getKeyInt("force", -1);
   this->neighbourCut2_ = argList.getKeyDouble("neighbour", 3.5);
   this->neighbourCut2_ *= this->neighbourCut2_;
@@ -1393,8 +1394,6 @@ std::tuple<int, int, int, int> Action_GIGist::findHMaximum(std::vector<std::vect
   /* default for firstMaximum is 0,
    * so this bool is False is no firstMaximum is given */
   bool considerOtherMaximum = std::get<0>(firstMaximum) != 0;
-  /* TODO get from applied water model in simulation */
-  double idealAngle = 104.57;
   for (int i = 0; i < dim; ++i) {
     for (int j = 0; j < dim; ++j) {
       for (int k = 0; k < dim; ++k) {
@@ -1403,7 +1402,8 @@ std::tuple<int, int, int, int> Action_GIGist::findHMaximum(std::vector<std::vect
           auto possibleMaximum = std::make_tuple(grid[i][j][k], i, j, k);
           if (considerOtherMaximum) {
             double angle = this->calcAngleBetweenHGridPos(possibleMaximum, firstMaximum);
-            if (idealAngle-5 < angle && angle < idealAngle+5) {
+            if (this->idealWaterAngle_ - 5 < angle &&
+                angle < this->idealWaterAngle_ + 5) {
               maximum = possibleMaximum;
             }
           }
@@ -1415,7 +1415,8 @@ std::tuple<int, int, int, int> Action_GIGist::findHMaximum(std::vector<std::vect
           double angle = this->calcAngleBetweenHGridPos(maximum, firstMaximum);
           auto possibleMaximum = std::make_tuple(grid[i][j][k], i, j, k);
           double newAngle = this->calcAngleBetweenHGridPos(possibleMaximum, firstMaximum);
-          if (std::fabs(newAngle - idealAngle) < std::fabs(angle - idealAngle))
+          if (std::fabs(newAngle - this->idealWaterAngle_)
+              < std::fabs(angle - this->idealWaterAngle_))
             maximum = possibleMaximum;
         }
       }

@@ -393,6 +393,7 @@ private:
   // FEBISS related variables
   bool placeWaterMolecules_ = false;
   int nSoluteAtoms_ = 0;
+  double idealWaterAngle_ = 104.57;
 
   std::vector<std::vector<Vec3> > waterCoordinates_;
   std::vector<std::vector<Vec3>> hVectors_;
