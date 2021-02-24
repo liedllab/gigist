@@ -325,6 +325,8 @@ private:
     std::vector<int>
   > calcGPUEnergy(const ActionFrame &frame);
 
+  void updateNNFailureCount(double NNd_sqr, double NNs_sqr);
+
   // Functions defined for FEBISS implementation
 
   // In: Action_GIGIST.cpp
@@ -433,6 +435,9 @@ private:
       std::string centerAtom;
       int centerIdx = -1;
       int centerType = -1;
+      int nearestNeighborSixFailures = 0;
+      int nearestNeighborTransFailures = 0;
+      int nearestNeighborTotal = 0;
       double neighborCutoff = 0.0;
       bool calcEnergy = true;
       bool writeDx = true;
