@@ -258,9 +258,20 @@ private:
   // line: 981
   std::array<double, 4> calcTransEntropy(int);
 
+  using VecAndQuat = std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>;
   // In: Action_GIGIST.cpp
   // line: 1064
-  void calcTransEntropyDist(int, int, const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>&, double &, double &);
+  void calcTransEntropyDist(int, const VecAndQuat&, double &, double &);
+
+  // In: Action_GIGIST.cpp
+  // line: 1379
+  std::pair<double, double> sixEntropyNearestNeighbor(const VecAndQuat&, int, int);
+
+  // In: Action_GIGIST.cpp
+  // line: 1406
+  std::array<int, 3> getVoxelVec(int voxel);
+
+  bool voxelIsAtGridBorder(int);
 
   // In: Action_GIGIST.cpp
   // line: 1082
@@ -467,7 +478,7 @@ private:
   std::vector<DataSet_3D*> result_;
   std::vector<std::vector<double> > resultV_;
 
-  LinkedCellGrid<std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT> > > centersAndRotations_;
+  LinkedCellGrid<VecAndQuat> centersAndRotations_;
   std::vector<DOUBLE_O_FLOAT> charges_;
   std::vector<int> molecule_;
   std::vector<int> atomTypes_;
