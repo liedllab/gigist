@@ -1122,9 +1122,10 @@ void Action_GIGist::Print() {
   mprintf("Number of possible failures in Nearest-Neighbor search:\n");
   mprintf("Trans: %d (%.1f%); Six: %d (%.1f%); Total searches: %d;\n",
           info_.gist.nearestNeighborTransFailures,
-          (double) info_.gist.nearestNeighborTransFailures / info_.gist.nearestNeighborTotal,
+          (double) info_.gist.nearestNeighborTransFailures / info_.gist.nearestNeighborTotal * 100.0,
           info_.gist.nearestNeighborSixFailures,
-          (double) info_.gist.nearestNeighborSixFailures / info_.gist.nearestNeighborTotal);
+          (double) info_.gist.nearestNeighborSixFailures / info_.gist.nearestNeighborTotal * 100.0,
+          info_.gist.nearestNeighborTotal);
   
   mprintf("Writing output:\n");
   this->datafile_->Printf("GIST calculation output. rho0 = %g, n_frames = %d\n", info_.system.rho0, info_.system.nFrames);
@@ -1465,7 +1466,7 @@ void Action_GIGist::updateNNFailureCount(double NNd_sqr, double NNs_sqr) {
     if (NNd_sqr > smallest_delta) {
         ++info_.gist.nearestNeighborTransFailures;
     }
-    if (NNd_sqr > smallest_delta) {
+    if (NNs_sqr > smallest_delta) {
         ++info_.gist.nearestNeighborSixFailures;
     }
     ++info_.gist.nearestNeighborTotal;
