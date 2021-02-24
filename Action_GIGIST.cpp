@@ -1380,7 +1380,6 @@ std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
     int voxel,
     int n_layers)
 {
-  mprintf("Voxel: %d\n", voxel);
   double NNd{ HUGE };
   double NNs{ HUGE };
   const std::array<int, 3> griddims{ info_.grid.dimensions };
@@ -1393,13 +1392,10 @@ std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
       for (int z = xyz[2] - n_layers; z <= xyz[2] + n_layers; ++z) {
         if ( z < 0 || z >= griddims[2] ) { continue; }
         int voxel2{ x * step[0] + y * step[1] + z * step[2] };
-        mprintf("Other: %d: %d %d %d\n", voxel, x, y, z);
         calcTransEntropyDist(voxel2, quat, NNd, NNs);
       }
     }
   }
-  mprintf("Dists: %f %f\n", NNd, NNs);
-  throw "Did my job for now\n";
   return {NNd, NNs};
 }
 
@@ -1461,12 +1457,12 @@ void Action_GIGist::calcTransEntropyDist(int voxel2, const VecAndQuat& quat, dou
  * Otherwise increment failure counts.
  **/
 void Action_GIGist::updateNNFailureCount(double NNd_sqr, double NNs_sqr) {
-    double smallest_delta = *std::min_element(std::begin(info_.grid.dimensions), std::end(info_.grid.dimensions));
-    smallest_delta *= smallest_delta;
-    if (NNd_sqr > smallest_delta) {
+    double save_dist = info_.grid.voxelSize;
+    save_dist *= save_dist;
+    if (NNd_sqr > save_dist) {
         ++info_.gist.nearestNeighborTransFailures;
     }
-    if (NNs_sqr > smallest_delta) {
+    if (NNs_sqr > save_dist) {
         ++info_.gist.nearestNeighborSixFailures;
     }
     ++info_.gist.nearestNeighborTotal;
