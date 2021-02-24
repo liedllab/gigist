@@ -1119,6 +1119,12 @@ void Action_GIGist::Print() {
     }
   }
 
+  mprintf("Number of possible failures in Nearest-Neighbor search:\n");
+  mprintf("Trans: %d (%.1f%); Six: %d (%.1f%); Total searches: %d;\n",
+          info_.gist.nearestNeighborTransFailures,
+          (double) info_.gist.nearestNeighborTransFailures / info_.gist.nearestNeighborTotal,
+          info_.gist.nearestNeighborSixFailures,
+          (double) info_.gist.nearestNeighborSixFailures / info_.gist.nearestNeighborTotal);
   
   mprintf("Writing output:\n");
   this->datafile_->Printf("GIST calculation output. rho0 = %g, n_frames = %d\n", info_.system.rho0, info_.system.nFrames);
@@ -1386,7 +1392,11 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
       ret.at(3) = 0;
       return ret;
     }
-    if (NNd < 3 && NNd > 0) {
+    if (NNd <= 0) {
+        throw "Error: 2 molecules seem to be at the same place";
+    }
+    updateNNFailureCount(NNd*NNd, NNs);
+    if (NNd < HUGE){
       // For both, the number of frames is used as the number of measurements.
       // The third power of NNd has to be taken, since NNd is only power 1.
       ret.at(0) += log(NNd * NNd * NNd * info_.system.nFrames * 4 * Constants::PI * info_.system.rho0 / 3.0);
@@ -1442,6 +1452,24 @@ void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, const std::pair
     }
   }
 } 
+
+/**
+ * updates nearestNeighborTransFailures, nearestNeighborSixFailures, and nearestNeighborTotal
+ * NNd_sqr and NNs_sqr should be squared nearest neighbor estimates.
+ * if they are smaller than the grid spacing, they are guaranteed to be the smallest.
+ * Otherwise increment failure counts.
+ **/
+void Action_GIGist::updateNNFailureCount(double NNd_sqr, double NNs_sqr) {
+    double smallest_delta = *std::min_element(std::begin(info_.grid.dimensions), std::end(info_.grid.dimensions));
+    smallest_delta *= smallest_delta;
+    if (NNd_sqr > smallest_delta) {
+        ++info_.gist.nearestNeighborTransFailures;
+    }
+    if (NNd_sqr > smallest_delta) {
+        ++info_.gist.nearestNeighborSixFailures;
+    }
+    ++info_.gist.nearestNeighborTotal;
+}
 
 /**
  * A weighting for the different elements.
