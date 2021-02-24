@@ -1330,69 +1330,22 @@ std::array<double, 2> Action_GIGist::calcOrientEntropy(int voxel) {
 std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
   // Will hold dTStrans (norm, dens) and dTSsix (norm, dens)
   std::array<double, 4> ret{};
+  if ( voxelIsAtGridBorder(voxel) ) {
+    return ret;
+  }
   // dTStrans uses all solvents => use nwtotal
   // dTSsix does not use ions => count separately
   int nwtotal = (*this->result_.at(this->dict_.getIndex("population")))[voxel];
   int nw_six{ 0 };
-  for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat : centersAndRotations_.at(voxel)) {
-    double NNd = HUGE;
-    double NNs = HUGE;
+  for (const VecAndQuat& quat : centersAndRotations_.at(voxel)) {
     if ( quat.second.initialized() ) {
         // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
         ++nw_six;
     }
-    // Self is not migrated to the function, as it would need to have a check against self comparison
-    // The need is not entirely true, as it would produce 0 as a value.
-    for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat2 : centersAndRotations_.at(voxel)) {
-      if (!(quat.first != quat2.first) && quat.second == quat2.second) {
-        continue;
-      }
-      double dd{ (quat.first - quat2.first).Magnitude2() };
-      if (dd > Constants::SMALL && dd < NNd) {
-        NNd = dd;
-      }
-      if ( quat.second.initialized() &&
-		      quat2.second.initialized() )
-      {
-      	double rR{ quat.second.distance(quat2.second) };
-      	double ds{ rR * rR + dd };
-      	if (ds < NNs && ds > Constants::SMALL) {
-        	NNs = ds;
-      	}
-      }
-    }
-    // Get the values for the dimensions
-    Vec3 step{};
-    step.SetVec(info_.grid.dimensions[2] * info_.grid.dimensions[1], info_.grid.dimensions[2], 1);
-    int x{ voxel / (static_cast<int>( info_.grid.dimensions[2] ) * static_cast<int>( info_.grid.dimensions[1]) ) };
-    int y{ (voxel / static_cast<int>( info_.grid.dimensions[2] ) ) % static_cast<int>( info_.grid.dimensions[1] ) };
-    int z{ voxel % static_cast<int>( info_.grid.dimensions[2] ) };
-    // Check if the value is inside the boundaries, i.e., there is still a neighbour in
-    // each direction.
-    if ( !((x <= 0                       ) || (y <= 0                       ) || (z <= 0                       ) ||
-           (x >= info_.grid.dimensions[0] - 1) || (y >= info_.grid.dimensions[1] - 1) || (z >= info_.grid.dimensions[2] - 1)) ) {
-      // Builds a 3 x 3 x 3 cube for entropy calculation
-
-      for (int dim1 = -1; dim1 < 2; ++dim1) {
-        for (int dim2 = -1; dim2 < 2; ++dim2) {
-          for (int dim3 = -1; dim3 < 2; ++dim3) {
-            int voxel2{ voxel + dim1 * static_cast<int>( step[0] ) + dim2 * static_cast<int>( step[1] ) + dim3 * static_cast<int>( step[2] ) };
-            // Checks if the voxel2 is the same as voxel, if so, has already been calculated
-            if (voxel2 != voxel) {
-              calcTransEntropyDist(voxel, voxel2, quat, NNd, NNs);
-            }
-          }
-        }
-      }
-      // Bring NNd back to power 1. NNs is kept at power 2, since it is needed as a power 3 later.
-      NNd = sqrt(NNd);
-    } else {
-      ret.at(0) = 0;
-      ret.at(1) = 0;
-      ret.at(2) = 0;
-      ret.at(3) = 0;
-      return ret;
-    }
+    std::pair<double, double> distances{ sixEntropyNearestNeighbor( quat, voxel, 1 ) };
+    double NNd = distances.first;
+    double NNs = distances.second;
+    NNd = sqrt(NNd);
     if (NNd <= 0) {
         throw "Error: 2 molecules seem to be at the same place";
     }
@@ -1412,11 +1365,62 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
     double dTSt_n{ Constants::GASK_KCAL * info_.system.temperature * (ret.at(0) / nwtotal + Constants::EULER_MASC) };
     ret.at(0) = dTSt_n;
     ret.at(1) = dTSt_n * nwtotal / (info_.system.nFrames * info_.grid.voxelVolume);
+  }
+  if (ret.at(2) != 0) {
     double dTSs_n{ Constants::GASK_KCAL * info_.system.temperature * (ret.at(2) / nw_six + Constants::EULER_MASC) };
     ret.at(2) = dTSs_n;
     ret.at(3) = dTSs_n * nw_six / (info_.system.nFrames * info_.grid.voxelVolume);
   }
   return ret;
+}
+
+
+std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
+    const VecAndQuat& quat,
+    int voxel,
+    int n_layers)
+{
+  mprintf("Voxel: %d\n", voxel);
+  double NNd{ HUGE };
+  double NNs{ HUGE };
+  const std::array<int, 3> griddims{ info_.grid.dimensions };
+  const std::array<int, 3> step{ griddims[2] * griddims[1], griddims[2], 1 };
+  const std::array<int, 3> xyz{ getVoxelVec(voxel) };
+  for (int x = xyz[0] - n_layers; x <= xyz[0] + n_layers; ++x) {
+    if ( x < 0 || x >= griddims[0] ) { continue; }
+    for (int y = xyz[1] - n_layers; y <= xyz[1] + n_layers; ++y) {
+      if ( y < 0 || y >= griddims[1] ) { continue; }
+      for (int z = xyz[2] - n_layers; z <= xyz[2] + n_layers; ++z) {
+        if ( z < 0 || z >= griddims[2] ) { continue; }
+        int voxel2{ x * step[0] + y * step[1] + z * step[2] };
+        mprintf("Other: %d: %d %d %d\n", voxel, x, y, z);
+        calcTransEntropyDist(voxel2, quat, NNd, NNs);
+      }
+    }
+  }
+  mprintf("Dists: %f %f\n", NNd, NNs);
+  throw "Did my job for now\n";
+  return {NNd, NNs};
+}
+
+std::array<int, 3> Action_GIGist::getVoxelVec(int voxel)
+{
+  return {
+    voxel / ( info_.grid.dimensions[2] * info_.grid.dimensions[1] ),
+    (voxel / info_.grid.dimensions[2] ) % info_.grid.dimensions[1],
+    voxel % info_.grid.dimensions[2],
+  };
+}
+
+bool Action_GIGist::voxelIsAtGridBorder(int voxel)
+{
+  std::array<int, 3> xyz{ getVoxelVec(voxel) };
+  std::array<int, 3> dim{ info_.grid.dimensions };
+  return ( !(
+     xyz[0] > 0 && xyz[0] < dim[0] - 1 &&
+     xyz[1] > 0 && xyz[1] < dim[1] - 1 &&
+     xyz[2] > 0 && xyz[2] < dim[2] - 1
+  ) );
 }
 
 /**
@@ -1430,24 +1434,20 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
  * @param NNs: The lowest distance in angular space. If the calculated
  *                one is smaller, saves it here.
  */
-void Action_GIGist::calcTransEntropyDist(int voxel1, int voxel2, const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>& quat, double &NNd, double &NNs) {
-  int nSolvV2{ static_cast<int>( (*result_.at(dict_.getIndex("population")))[voxel2] ) };
-  if (voxel1 == voxel2)
-    return;
-  for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat2 : centersAndRotations_.at(voxel2)) {
-    // if (voxel1 == voxel2 && !(quat.first != quat2.first) && quat.second == quat2.second) {
-    //   continue;
-    // }
+void Action_GIGist::calcTransEntropyDist(int voxel2, const VecAndQuat& quat, double &NNd, double &NNs) {
+  for (const VecAndQuat& quat2 : centersAndRotations_.at(voxel2)) {
+    if (&quat == &quat2){
+      continue;
+    }
     double dd{ (quat.first - quat2.first).Magnitude2() };
-    if (dd > Constants::SMALL && dd < NNd) {
+    if (dd < NNd) {
       NNd = dd;
     }
-    if (quat.second.initialized() &&
-		    quat2.second.initialized())
+    if (quat.second.initialized() && quat2.second.initialized())
     {
       double rR{ quat.second.distance(quat2.second) };
       double ds{ rR * rR + dd };
-      if (ds < NNs && ds > 0) {
+      if (ds < NNs) {
         NNs = ds;
       }
     }
