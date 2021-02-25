@@ -1342,7 +1342,7 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
         // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
         ++nw_six;
     }
-    std::pair<double, double> distances{ sixEntropyNearestNeighbor( quat, voxel, 1 ) };
+    std::pair<double, double> distances{ sixEntropyNearestNeighbor( quat, voxel, 0 ) };
     double NNd = distances.first;
     double NNs = distances.second;
     NNd = sqrt(NNd);
