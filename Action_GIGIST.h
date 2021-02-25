@@ -265,7 +265,7 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 1379
-  std::pair<double, double> sixEntropyNearestNeighbor(const VecAndQuat&, int, int, double, double);
+  std::pair<double, double> sixEntropyNearestNeighbor(const VecAndQuat&, int, int, double = HUGE, double = HUGE);
 
   // In: Action_GIGIST.cpp
   // line: 1406

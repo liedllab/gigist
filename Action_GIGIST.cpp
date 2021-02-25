@@ -1379,25 +1379,29 @@ std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
     const VecAndQuat& quat,
     int voxel,
     int n_layers,
-    double NNd = HUGE,
-    double NNs = HUGE)
+    double NNd,
+    double NNs)
 {
   const std::array<int, 3> griddims{ info_.grid.dimensions };
   const std::array<int, 3> step{ griddims[2] * griddims[1], griddims[2], 1 };
   const std::array<int, 3> xyz{ getVoxelVec(voxel) };
   for (int x = xyz[0] - n_layers; x <= xyz[0] + n_layers; ++x) {
     if ( x < 0 || x >= griddims[0] ) { continue; }
+    bool x_is_border{ x == xyz[0] - n_layers || x == xyz[0] + n_layers };
     for (int y = xyz[1] - n_layers; y <= xyz[1] + n_layers; ++y) {
       if ( y < 0 || y >= griddims[1] ) { continue; }
+      bool y_is_border{ y == xyz[1] - n_layers || y == xyz[1] + n_layers };
       for (int z = xyz[2] - n_layers; z <= xyz[2] + n_layers; ++z) {
         if ( z < 0 || z >= griddims[2] ) { continue; }
+        bool z_is_border{ z == xyz[2] - n_layers || z == xyz[2] + n_layers };
+        if ( !(x_is_border || y_is_border || z_is_border) ) { continue; }
         int voxel2{ x * step[0] + y * step[1] + z * step[2] };
         calcTransEntropyDist(voxel2, quat, NNd, NNs);
       }
     }
   }
   if (quat.second.initialized() && NNs > info_.grid.voxelSize * n_layers) {
-    return sixEntropyNearestNeighbor(quat, voxel, n_layers + 1);
+    return sixEntropyNearestNeighbor(quat, voxel, n_layers + 1, NNd, NNs);
   }
   return {NNd, NNs};
 }
