@@ -1378,10 +1378,10 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
 std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
     const VecAndQuat& quat,
     int voxel,
-    int n_layers)
+    int n_layers,
+    double NNd = HUGE,
+    double NNs = HUGE)
 {
-  double NNd{ HUGE };
-  double NNs{ HUGE };
   const std::array<int, 3> griddims{ info_.grid.dimensions };
   const std::array<int, 3> step{ griddims[2] * griddims[1], griddims[2], 1 };
   const std::array<int, 3> xyz{ getVoxelVec(voxel) };
