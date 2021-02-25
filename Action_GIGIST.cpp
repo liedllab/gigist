@@ -1396,6 +1396,9 @@ std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
       }
     }
   }
+  if (quat.second.initialized() && NNs > info_.grid.voxelSize * n_layers) {
+    return sixEntropyNearestNeighbor(quat, voxel, n_layers + 1);
+  }
   return {NNd, NNs};
 }
 
