@@ -1,4 +1,5 @@
 #include "Action_GIGIST.h"
+#include "GIGIST_six_corr.h"
 #include <iostream>
 #include <iomanip>
 
@@ -1357,7 +1358,9 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
       // NNs is used to the power of 6, since it is already power of 2, only the third power
       // has to be calculated.
       if ( quat.second.initialized() ) {
-        ret.at(2) += log(NNs * NNs * NNs * info_.system.nFrames * Constants::PI * info_.system.rho0 / 48.0);
+        double sixVol = NNs * NNs * NNs * info_.system.nFrames * Constants::PI * info_.system.rho0 / 48.0;
+        sixVol /= sixVolumeCorrFactor(NNs);
+        ret.at(2) += log(sixVol);
       }
     }
   }
@@ -1406,7 +1409,18 @@ std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
   return {NNd, NNs};
 }
 
-std::array<int, 3> Action_GIGist::getVoxelVec(int voxel)
+double Action_GIGist::sixVolumeCorrFactor(double NNs) const
+{
+    double dbl_index = NNs / SIX_CORR_SPACING;
+    int index = std::max(0, std::min(
+        static_cast<int>(SIX_CORR.size() - 2),
+        static_cast<int>(dbl_index)));
+    double dx = dbl_index - index;
+    double interp = (1-dx) * SIX_CORR[index] + dx * SIX_CORR[index+1];
+    return interp;
+}
+
+std::array<int, 3> Action_GIGist::getVoxelVec(int voxel) const
 {
   return {
     voxel / ( info_.grid.dimensions[2] * info_.grid.dimensions[1] ),
@@ -1415,7 +1429,7 @@ std::array<int, 3> Action_GIGist::getVoxelVec(int voxel)
   };
 }
 
-bool Action_GIGist::voxelIsAtGridBorder(int voxel)
+bool Action_GIGist::voxelIsAtGridBorder(int voxel) const
 {
   std::array<int, 3> xyz{ getVoxelVec(voxel) };
   std::array<int, 3> dim{ info_.grid.dimensions };
@@ -1437,7 +1451,8 @@ bool Action_GIGist::voxelIsAtGridBorder(int voxel)
  * @param NNs: The lowest distance in angular space. If the calculated
  *                one is smaller, saves it here.
  */
-void Action_GIGist::calcTransEntropyDist(int voxel2, const VecAndQuat& quat, double &NNd, double &NNs) {
+void Action_GIGist::calcTransEntropyDist(int voxel2, const VecAndQuat& quat, double &NNd, double &NNs)
+{
   for (const VecAndQuat& quat2 : centersAndRotations_.at(voxel2)) {
     if (&quat == &quat2){
       continue;

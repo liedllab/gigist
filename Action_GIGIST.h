@@ -269,9 +269,9 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 1406
-  std::array<int, 3> getVoxelVec(int voxel);
+  std::array<int, 3> getVoxelVec(int voxel) const;
 
-  bool voxelIsAtGridBorder(int);
+  bool voxelIsAtGridBorder(int) const;
 
   // In: Action_GIGIST.cpp
   // line: 1082
@@ -337,6 +337,7 @@ private:
   > calcGPUEnergy(const ActionFrame &frame);
 
   void updateNNFailureCount(double NNd_sqr, double NNs_sqr);
+  double sixVolumeCorrFactor(double) const;
 
   // Functions defined for FEBISS implementation
 
