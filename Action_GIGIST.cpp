@@ -1293,25 +1293,25 @@ std::array<double, 2> Action_GIGist::calcOrientEntropy(int voxel) {
   }
   double dTSo_n{ 0.0 };
   int water_count{ 0 };
-  for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat : centersAndRotations_.at(voxel)) {
-    double NNr{ 100000.0 };
-    for (std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>> quat2 : centersAndRotations_.at(voxel)) {
-      if (quat.second == quat2.second) {
+  for (const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>& quat : centersAndRotations_.at(voxel)) {
+    double NNr{ HUGE };
+    for (const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>& quat2 : centersAndRotations_.at(voxel)) {
+      if (&quat == &quat2) {
         continue;
       }
 
-     if ( quat.second.initialized() &&
-		      quat2.second.initialized() )
-     {
-      	double rR{ quat.second.distance(quat2.second) };
-      	if ( (rR < NNr) && (rR > 0.0) ) {
-        	NNr = rR;
-      	}
-      }
+      if ( quat.second.initialized() && quat2.second.initialized() )
+      {
+         double rR{ quat.second.distance(quat2.second) };
+         if ( (rR < NNr) ) {
+           NNr = rR;
+         }
+       }
     }
-    if (NNr < 99999 && NNr > 0) {
+    if (NNr < HUGE) {
       ++water_count;
-      dTSo_n += log(NNr * NNr * NNr / (3.0 * Constants::TWOPI));
+      /* dTSo_n += log(NNr * NNr * NNr / (3.0 * Constants::TWOPI)); */
+      dTSo_n += log((NNr - sin(NNr)) / Constants::PI);
     }
   }
   dTSo_n += water_count * log(water_count);
