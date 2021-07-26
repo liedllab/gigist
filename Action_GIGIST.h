@@ -256,16 +256,16 @@ private:
 
   // In: Action_GIGIST.cpp
   // line: 981
-  std::array<double, 4> calcTransEntropy(int);
+  std::pair<std::array<double, 4>, int> calcTransEntropy(int);
 
-  using VecAndQuat = std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>;
+  using VecAndQuat = std::tuple<Vec3, Quaternion<DOUBLE_O_FLOAT>, int>;
   // In: Action_GIGIST.cpp
   // line: 1064
-  void calcTransEntropyDist(int, const VecAndQuat&, double &, double &);
+  std::pair<int, int> calcTransEntropyDist(int, const VecAndQuat&, double &, double &);
 
   // In: Action_GIGIST.cpp
   // line: 1379
-  std::pair<double, double> sixEntropyNearestNeighbor(const VecAndQuat&, int, int, double = HUGE, double = HUGE);
+  std::tuple<double, double, int> sixEntropyNearestNeighbor(const VecAndQuat&, int, int, double = HUGE, double = HUGE);
 
   // In: Action_GIGIST.cpp
   // line: 1406
