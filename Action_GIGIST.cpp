@@ -812,7 +812,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           #pragma omp critical
           {
           #endif
-          centersAndRotations_.push_back(voxel, {coord, quat});
+          centersAndRotations_.push_back(voxel, {coord, quat, info_.system.nFrames});
           #ifdef _OPENMP
           }
           #endif
@@ -1024,7 +1024,9 @@ void Action_GIGist::Print() {
   
 #ifdef _OPENMP
   int curVox{ 0 };
+  
 #endif
+    int concerningNeighbors{ 0 };
   #pragma omp parallel for
   for (int voxel = 0; voxel < info_.grid.nVoxels; ++voxel) {
     // If _OPENMP is defined, the progress bar has to be updated critically,
@@ -1064,7 +1066,9 @@ void Action_GIGist::Print() {
       std::array<double, 2> dTSorient = calcOrientEntropy(voxel);
       dTSorient_norm          = dTSorient.at(0);
       dTSorient_dens          = dTSorient.at(1);
-      std::array<double, 4> dTS = calcTransEntropy(voxel);
+      auto ret = calcTransEntropy(voxel);
+      concerningNeighbors += std::get<1>(ret);
+      std::array<double, 4> dTS = std::move(std::get<0>(ret));
       dTStrans_norm           = dTS.at(0);
       dTStrans_dens           = dTS.at(1);
       dTSsix_norm             = dTS.at(2);
@@ -1127,7 +1131,10 @@ void Action_GIGist::Print() {
           info_.gist.nearestNeighborSixFailures,
           (double) info_.gist.nearestNeighborSixFailures / info_.gist.nearestNeighborTotal * 100.0,
           info_.gist.nearestNeighborTotal);
-  
+
+  mprintf("Percent of concerning Neighbors:\n");
+  mprintf("%d\n", concerningNeighbors );
+
   mprintf("Writing output:\n");
   this->datafile_->Printf("GIST calculation output. rho0 = %g, n_frames = %d\n", info_.system.rho0, info_.system.nFrames);
   this->datafile_->Printf("   voxel        x          y          z         population     dTSt_d(kcal/mol)  dTSt_n(kcal/mol)"
@@ -1294,16 +1301,16 @@ std::array<double, 2> Action_GIGist::calcOrientEntropy(int voxel) {
   }
   double dTSo_n{ 0.0 };
   int water_count{ 0 };
-  for (const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>& quat : centersAndRotations_.at(voxel)) {
+  for (const VecAndQuat& quat : centersAndRotations_.at(voxel)) {
     double NNr{ HUGE };
-    for (const std::pair<Vec3, Quaternion<DOUBLE_O_FLOAT>>& quat2 : centersAndRotations_.at(voxel)) {
+    for (const VecAndQuat& quat2 : centersAndRotations_.at(voxel)) {
       if (&quat == &quat2) {
         continue;
       }
 
-      if ( quat.second.initialized() && quat2.second.initialized() )
+      if ( std::get<1>(quat).initialized() && std::get<1>(quat2).initialized() )
       {
-         double rR{ quat.second.distance(quat2.second) };
+         double rR{ std::get<1>(quat).distance(std::get<1>(quat2)) };
          if ( (rR < NNr) ) {
            NNr = rR;
          }
@@ -1328,24 +1335,31 @@ std::array<double, 2> Action_GIGist::calcOrientEntropy(int voxel) {
  * @return: A vector type object, holding the values for the translational
  *          entropy, as well as the six integral entropy.
  */
-std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
+std::pair<std::array<double, 4>, int> Action_GIGist::calcTransEntropy(int voxel) {
   // Will hold dTStrans (norm, dens) and dTSsix (norm, dens)
   std::array<double, 4> ret{};
   if ( voxelIsAtGridBorder(voxel) ) {
-    return ret;
+    return { ret, 0 };
   }
+  int concerningNeighbors{ 0 };
   // dTStrans uses all solvents => use nwtotal
   // dTSsix does not use ions => count separately
   int nwtotal = (*this->result_.at(this->dict_.getIndex("population")))[voxel];
   int nw_six{ 0 };
   for (const VecAndQuat& quat : centersAndRotations_.at(voxel)) {
-    if ( quat.second.initialized() ) {
+    if ( std::get<1>(quat).initialized() ) {
         // the current molecule has rotational degrees of freedom, i.e., it's not an ion.
         ++nw_six;
     }
-    std::pair<double, double> distances{ sixEntropyNearestNeighbor( quat, voxel, 0 ) };
-    double NNd = distances.first;
-    double NNs = distances.second;
+    std::tuple<double, double, int> distances{ sixEntropyNearestNeighbor( quat, voxel, 0 ) };
+    double NNd = std::get<0>( distances );
+    double NNs = std::get<1>( distances );
+    if ( std::abs( std::get<2>( distances ) ) <= 3 ) {
+	    concerningNeighbors++;
+    }
+    if ( std::abs( std::get<2>(distances) ) == 0 ) {
+	    mprintf("Something might be wrong!\n");
+    }
     NNd = sqrt(NNd);
     if (NNd <= 0) {
         throw "Error: 2 molecules seem to be at the same place";
@@ -1357,7 +1371,7 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
       ret.at(0) += log(NNd * NNd * NNd * info_.system.nFrames * 4 * Constants::PI * info_.system.rho0 / 3.0);
       // NNs is used to the power of 6, since it is already power of 2, only the third power
       // has to be calculated.
-      if ( quat.second.initialized() ) {
+      if ( std::get<1>(quat).initialized() ) {
         double sixVol = NNs * NNs * NNs * info_.system.nFrames * Constants::PI * info_.system.rho0 / 48.0;
         sixVol /= sixVolumeCorrFactor(NNs);
         ret.at(2) += log(sixVol);
@@ -1374,11 +1388,11 @@ std::array<double, 4> Action_GIGist::calcTransEntropy(int voxel) {
     ret.at(2) = dTSs_n;
     ret.at(3) = dTSs_n * nw_six / (info_.system.nFrames * info_.grid.voxelVolume);
   }
-  return ret;
+  return { ret, concerningNeighbors };
 }
 
 
-std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
+std::tuple<double, double, int> Action_GIGist::sixEntropyNearestNeighbor(
     const VecAndQuat& quat,
     int voxel,
     int n_layers,
@@ -1388,6 +1402,7 @@ std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
   const std::array<int, 3> griddims{ info_.grid.dimensions };
   const std::array<int, 3> step{ griddims[2] * griddims[1], griddims[2], 1 };
   const std::array<int, 3> xyz{ getVoxelVec(voxel) };
+  std::pair<int, int> nnFrames;
   for (int x = xyz[0] - n_layers; x <= xyz[0] + n_layers; ++x) {
     if ( x < 0 || x >= griddims[0] ) { continue; }
     bool x_is_border{ x == xyz[0] - n_layers || x == xyz[0] + n_layers };
@@ -1399,14 +1414,15 @@ std::pair<double, double> Action_GIGist::sixEntropyNearestNeighbor(
         bool z_is_border{ z == xyz[2] - n_layers || z == xyz[2] + n_layers };
         if ( !(x_is_border || y_is_border || z_is_border) ) { continue; }
         int voxel2{ x * step[0] + y * step[1] + z * step[2] };
-        calcTransEntropyDist(voxel2, quat, NNd, NNs);
+        nnFrames = calcTransEntropyDist(voxel2, quat, NNd, NNs);
       }
     }
   }
-  if (quat.second.initialized() && NNs > info_.grid.voxelSize * n_layers) {
+  if (std::get<1>(quat).initialized() && NNs > info_.grid.voxelSize * n_layers) {
     return sixEntropyNearestNeighbor(quat, voxel, n_layers + 1, NNd, NNs);
   }
-  return {NNd, NNs};
+  int dist = std::abs(nnFrames.second - nnFrames.first);
+  return {NNd, NNs, dist};
 }
 
 double Action_GIGist::sixVolumeCorrFactor(double NNs) const
@@ -1451,25 +1467,28 @@ bool Action_GIGist::voxelIsAtGridBorder(int voxel) const
  * @param NNs: The lowest distance in angular space. If the calculated
  *                one is smaller, saves it here.
  */
-void Action_GIGist::calcTransEntropyDist(int voxel2, const VecAndQuat& quat, double &NNd, double &NNs)
+std::pair<int, int> Action_GIGist::calcTransEntropyDist(int voxel2, const VecAndQuat& quat, double &NNd, double &NNs)
 {
+  std::pair<int, int> frames{ std::get<2>(quat), 0 };
   for (const VecAndQuat& quat2 : centersAndRotations_.at(voxel2)) {
     if (&quat == &quat2){
       continue;
     }
-    double dd{ (quat.first - quat2.first).Magnitude2() };
+    double dd{ (std::get<0>(quat) - std::get<0>(quat2)).Magnitude2() };
     if (dd < NNd) {
       NNd = dd;
     }
-    if (quat.second.initialized() && quat2.second.initialized())
+    if (std::get<1>(quat).initialized() && std::get<1>(quat2).initialized())
     {
-      double rR{ quat.second.distance(quat2.second) };
+      double rR{ std::get<1>( quat ).distance( std::get<1>(quat2) ) };
       double ds{ rR * rR + dd };
       if (ds < NNs) {
         NNs = ds;
+	frames.second = std::get<2>( quat2 );
       }
     }
   }
+  return frames;
 } 
 
 /**
