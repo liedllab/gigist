@@ -13,7 +13,7 @@
   * @return: The minimal distance in an orthorhombic box.
   */
 __device__ 
-float dist2_imageOrtho(float *vec1, float *vec2, const BoxInfo& box) {
+float dist2_imageOrtho_GIGIST(float *vec1, float *vec2, const BoxInfo& box) {
   if (box[0] == 0 || box[1] == 0 || box[2] == 0) {
     return -1;
   }
@@ -64,7 +64,7 @@ float dist2_imageOrtho(float *vec1, float *vec2, const BoxInfo& box) {
  * @param ret: The values to be returned. If null, returns into vec.
  */
 __device__
-void scalarProd(float* vec, const BoxInfo& mat3x3, float *ret) {
+void scalarProd_GIGIST(float* vec, const BoxInfo& mat3x3, float *ret) {
   if (ret != NULL) {
     ret[0] = vec[0] * mat3x3[0] + vec[1] * mat3x3[1] + vec[2] * mat3x3[2];
     ret[1] = vec[0] * mat3x3[3] + vec[1] * mat3x3[4] + vec[2] * mat3x3[5];
@@ -88,12 +88,12 @@ void scalarProd(float* vec, const BoxInfo& mat3x3, float *ret) {
  * @return: The minimal squared distance between two atoms, also considering the images.
  */
 __device__
-float dist2_imageNonOrtho(float *vec1, float *vec2, const BoxInfo& recip, const UnitCell& ucell) {
+float dist2_imageNonOrtho_GIGIST(float *vec1, float *vec2, const BoxInfo& recip, const UnitCell& ucell) {
   float vecRecip1[3];
   float vecRecip2[3];
-  scalarProd(vec1, recip, vecRecip1);
-  scalarProd(vec2, recip, vecRecip2);
-  float r_2 = dist2_imageNonOrthoRecip(vecRecip1, vecRecip2, ucell);
+  scalarProd_GIGIST(vec1, recip, vecRecip1);
+  scalarProd_GIGIST(vec2, recip, vecRecip2);
+  float r_2 = dist2_imageNonOrthoRecip_GIGIST(vecRecip1, vecRecip2, ucell);
   
   return r_2;
 }
@@ -110,7 +110,7 @@ float dist2_imageNonOrtho(float *vec1, float *vec2, const BoxInfo& recip, const 
  * @return: The new minimum, if it is smaller than finalMin, finalMin otherwise.
  */
 __device__
-float calcIfDistIsSmaller(float *f, float *vec2Cartesian, int nx, int ny, int nz, const UnitCell& ucell, float finalMin) {
+float calcIfDistIsSmaller_GIGIST(float *f, float *vec2Cartesian, int nx, int ny, int nz, const UnitCell& ucell, float finalMin) {
   float fx = f[0] + nx;
   float fy = f[1] + ny;
   float fz = f[2] + nz;
@@ -137,7 +137,7 @@ float calcIfDistIsSmaller(float *f, float *vec2Cartesian, int nx, int ny, int nz
  * @return: The minimal distance between images.
  */
 __device__
-float dist2_imageNonOrthoRecip(float * vec1, float * vec2, const UnitCell& ucell) {
+float dist2_imageNonOrthoRecip_GIGIST(float * vec1, float * vec2, const UnitCell& ucell) {
     
   // Bring the points back into the main unit cell
   float fx = vec1[0] - floor(vec1[0]);
@@ -164,7 +164,7 @@ float dist2_imageNonOrthoRecip(float * vec1, float * vec2, const UnitCell& ucell
   for (int ix = -1; ix <= 1; ++ix) {
     for (int iy = -1; iy <= 1; ++iy) {
       for (int iz = -1; iz <= 1; ++iz) {
-        finalMinimum = calcIfDistIsSmaller(vec, vec2Real, ix, iy, iz, ucell, finalMinimum);
+        finalMinimum = calcIfDistIsSmaller_GIGIST(vec, vec2Real, ix, iy, iz, ucell, finalMinimum);
       }
     }
   }
@@ -176,7 +176,7 @@ float dist2_imageNonOrthoRecip(float * vec1, float * vec2, const UnitCell& ucell
  * Different function to calculate the distance
  */
 __device__
-float dist2_imageNonOrthoRecipTest(float * vec1, float * vec2, const UnitCell& ucell) {
+float dist2_imageNonOrthoRecipTest_GIGIST(float * vec1, float * vec2, const UnitCell& ucell) {
   float x = vec1[0] - vec2[0];
   float y = vec1[1] - vec2[1];
   float z = vec1[2] - vec2[2];
@@ -197,7 +197,7 @@ float dist2_imageNonOrthoRecipTest(float * vec1, float * vec2, const UnitCell& u
  * @return: The squared distance between the two positions.
  */
 __device__
-float dist2_noImage(float *vec1, float *vec2) {
+float dist2_noImage_GIGIST(float *vec1, float *vec2) {
   float x = vec1[0] - vec2[0];
   float y = vec1[1] - vec2[1];
   float z = vec1[2] - vec2[2];
@@ -220,14 +220,14 @@ float dist2_noImage(float *vec1, float *vec2) {
  * @return: The total interaction energy between the two atoms.
  */
 __device__
-float calcTotalEnergy(float q1, float q2, 
+float calcTotalEnergy_GIGIST(float q1, float q2, 
                             float LJA, float LJB, float r_2) {
 #ifdef DEBUG_GIST_CUDA
   if (r_2 <= 0.000001 && r_2 >= -0.000001) {
     printf("(%8.3f, %8.3f, %8.3f) (%8.3f, %8.3f, %8.3f) %d\n", vec1[0], vec1[1], vec1[2], vec2[0], vec2[1], vec2[2], boxinfo);
   }
 #endif
-  return calcVdWEnergy(r_2, LJA, LJB) + calcElectrostaticEnergy(r_2, q1, q2);
+  return calcVdWEnergy_GIGIST(r_2, LJA, LJB) + calcElectrostaticEnergy_GIGIST(r_2, q1, q2);
 }
 
 /**
@@ -239,19 +239,19 @@ float calcTotalEnergy(float q1, float q2,
  * @return: The squared distance between two points.
  */
 __device__
-float calcDist(float *vec1, float *vec2, const BoxInfo &recip_o_box,
+float calcDist_GIGIST(float *vec1, float *vec2, const BoxInfo &recip_o_box,
                     const UnitCell &ucell) {
   float r_2 = 0;
   switch(recip_o_box.boxinfo) {
     case 0:
-      r_2 = dist2_noImage(vec1, vec2);
+      r_2 = dist2_noImage_GIGIST(vec1, vec2);
       break;
     case 1:
       // Uses recip for box info as well;
-      r_2 = dist2_imageOrtho(vec1, vec2, recip_o_box);
+      r_2 = dist2_imageOrtho_GIGIST(vec1, vec2, recip_o_box);
       break;
     case 2:
-      r_2 = dist2_imageNonOrtho(vec1, vec2, recip_o_box, ucell);
+      r_2 = dist2_imageNonOrtho_GIGIST(vec1, vec2, recip_o_box, ucell);
       break;
     default:
       r_2 = 0;
@@ -267,7 +267,7 @@ float calcDist(float *vec1, float *vec2, const BoxInfo &recip_o_box,
  * @return: The Van der Waals energy.
  */
 __device__
-float calcVdWEnergy(float r_2, float LJA, float LJB) {
+float calcVdWEnergy_GIGIST(float r_2, float LJA, float LJB) {
   float r_6 = r_2 * r_2 * r_2;
   float r_12 = r_6 * r_6;
   float LJ =  LJA / r_12 - LJB / r_6;
@@ -285,7 +285,7 @@ float calcVdWEnergy(float r_2, float LJA, float LJB) {
  * @return: The electrostatic energy between the two atoms.
  */
 __device__
-float calcElectrostaticEnergy(float r_2, float q1, float q2) {
+float calcElectrostaticEnergy_GIGIST(float r_2, float q1, float q2) {
   double charge = q1 * q2 * ELECTOAMBER_2;
   double r = sqrt(r_2);
   float ELE = charge / r;
@@ -301,7 +301,7 @@ float calcElectrostaticEnergy(float r_2, float q1, float q2) {
  * @return: The index into the parameter arrays.
  */
 __device__
-int getLJIndex(int a1, int a2, int *NBindex, int ntypes) {
+int getLJIndex_GIGIST(int a1, int a2, int *NBindex, int ntypes) {
   return NBindex[a1 * ntypes + a2];
 }
 
@@ -315,8 +315,8 @@ int getLJIndex(int a1, int a2, int *NBindex, int ntypes) {
  * @return: The LJ parameter belonging to the atom type pair a1, a2.
  */
 __device__
-ParamsLJ getLJParam(int a1, int a2, int *NBindex, int ntypes, ParamsLJ *paramsLJ) {
-  int idx = getLJIndex(a1, a2, NBindex, ntypes);
+ParamsLJ getLJParam_GIGIST(int a1, int a2, int *NBindex, int ntypes, ParamsLJ *paramsLJ) {
+  int idx = getLJIndex_GIGIST(a1, a2, NBindex, ntypes);
   if (idx < 0) {
     return ParamsLJ();
   }
@@ -331,7 +331,7 @@ ParamsLJ getLJParam(int a1, int a2, int *NBindex, int ntypes, ParamsLJ *paramsLJ
  * @return: True if vector is on grid.
  */
 __device__
-bool isOnGrid(float *vec, float *min, float *max) {
+bool isOnGrid_GIGIST(float *vec, float *min, float *max) {
   return ( ( (vec[0] >= min[0]) && (vec[0] <= max[0]) ) &&
            ( (vec[1] >= min[1]) && (vec[1] <= max[1]) ) &&
            ( (vec[2] >= min[2]) && (vec[2] <= max[2]) ) );
@@ -359,7 +359,7 @@ bool isOnGrid(float *vec, float *min, float *max) {
  * @param max: The maximum values of the grid.
  */
 __global__
-void cudaCalcEnergy(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
+void cudaCalcEnergy_GIGIST(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
                           BoxInfo recip_o_box, UnitCell ucell, int maxAtoms, float *result_ww, float *result_sw, 
                           float *min, float *max, int headAtomType, float neighbourCut2, int *result_O, int *result_N) {
   
@@ -378,12 +378,12 @@ void cudaCalcEnergy(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ 
 
     Coordinates_GPU t1 = coords[a1];
     Coordinates_GPU t2 = coords[a2];
-    ParamsLJ lj = getLJParam(atom1.atomType, atom2.atomType, NBindex, ntypes, parameterLJ);
+    ParamsLJ lj = getLJParam_GIGIST(atom1.atomType, atom2.atomType, NBindex, ntypes, parameterLJ);
 
     float vec1[3] = {t1.x, t1.y, t1.z};
     float vec2[3] = {t2.x, t2.y, t2.z};
-    float r_2 = calcDist(vec1, vec2, recip_o_box, ucell);
-    float energy = calcTotalEnergy(atom1.charge, atom2.charge, lj.A, lj.B, r_2);
+    float r_2 = calcDist_GIGIST(vec1, vec2, recip_o_box, ucell);
+    float energy = calcTotalEnergy_GIGIST(atom1.charge, atom2.charge, lj.A, lj.B, r_2);
     
     if (atom2.solvent != 0) {
       atomicAdd(&(result_ww[a1]), energy * 0.5);
@@ -417,7 +417,7 @@ void cudaCalcEnergy(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ 
  * @param max: The maximum values of the grid.
  */
 __global__
-void cudaCalcEnergySlow(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
+void cudaCalcEnergySlow_GIGIST(Coordinates_GPU *coords, int *NBindex, int ntypes, ParamsLJ *parameterLJ, AtomProperties *atomProps, 
   BoxInfo recip_o_box, UnitCell ucell, int maxAtoms, float *result_ww, float *result_sw,
   float *min, float *max, int headAtomType, float neighbourCut2, int *result_O, int *result_N) {
   
@@ -440,11 +440,11 @@ void cudaCalcEnergySlow(Coordinates_GPU *coords, int *NBindex, int ntypes, Param
     if ( (a1 != a2) && (atom1.molecule != atom2.molecule)) {
       Coordinates_GPU t1 = coords[a1];
       Coordinates_GPU t2 = coords[a2];
-      ParamsLJ lj = getLJParam(atom1.atomType, atom2.atomType, NBindex, ntypes, parameterLJ);
+      ParamsLJ lj = getLJParam_GIGIST(atom1.atomType, atom2.atomType, NBindex, ntypes, parameterLJ);
       float vec1[3] = {t1.x, t1.y, t1.z};
       float vec2[3] = {t2.x, t2.y, t2.z};
-      float r_2 = calcDist(vec1, vec2, recip_o_box, ucell);
-      float energy = calcTotalEnergy(atom1.charge, atom2.charge, lj.A, lj.B, r_2);
+      float r_2 = calcDist_GIGIST(vec1, vec2, recip_o_box, ucell);
+      float energy = calcTotalEnergy_GIGIST(atom1.charge, atom2.charge, lj.A, lj.B, r_2);
       if ((atom2.atomType == headAtomType) && atom2.solvent && atom1.solvent) {
         if (r_2 < distances[0]) {
           distances[3] = distances[2];
@@ -492,7 +492,7 @@ void cudaCalcEnergySlow(Coordinates_GPU *coords, int *NBindex, int ntypes, Param
  * @param returnSSix: The return array for dTSsix.
  */
 __global__
-void calculateEntropy(EntropyCalculator entCalc, float *returnSTrans, float *returnSOrient, float *returnSSix) {
+void calculateEntropy_GIGIST(EntropyCalculator entCalc, float *returnSTrans, float *returnSOrient, float *returnSSix) {
   int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index >= entCalc.gridsize) {
     return;

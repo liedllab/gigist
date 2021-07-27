@@ -18,7 +18,7 @@ else
 fi
 echo "cpptraj home set to: $CPPTRAJ_HOME"
 
-cp -r Action_GIGIST.h Action_GIGIST.cpp ExceptionsGIST.h Quaternion.h cuda_kernel_gist/ $CPPTRAJ_HOME/src
+cp -r Action_GIGIST.h Action_GIGIST.cpp ExceptionsGIST.h Quaternion.h LinkedCellGrid.h GIGIST_six_corr.h cuda_kernel_gist/ $CPPTRAJ_HOME/src
 cd $CPPTRAJ_HOME && patch -p1 -i $WD/cpptraj.patch
 
 cd $WD
