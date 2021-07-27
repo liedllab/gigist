@@ -225,11 +225,11 @@ bool Action_GIGist::prepareGPUCalc(ActionSetup &setup) {
     }
 
     try {
-      allocateCuda(((void**)&NBindex_c_), NBIndex_.size() * sizeof(int));
-      allocateCuda((void**)&result_w_c_, info_.system.numberAtoms * sizeof(float));
-      allocateCuda((void**)&result_s_c_, info_.system.numberAtoms * sizeof(float));
-      allocateCuda((void**)&result_O_c_, info_.system.numberAtoms * 4 * sizeof(int));
-      allocateCuda((void**)&result_N_c_, info_.system.numberAtoms * sizeof(int));
+      allocateCuda_GIGIST(((void**)&NBindex_c_), NBIndex_.size() * sizeof(int));
+      allocateCuda_GIGIST((void**)&result_w_c_, info_.system.numberAtoms * sizeof(float));
+      allocateCuda_GIGIST((void**)&result_s_c_, info_.system.numberAtoms * sizeof(float));
+      allocateCuda_GIGIST((void**)&result_O_c_, info_.system.numberAtoms * 4 * sizeof(int));
+      allocateCuda_GIGIST((void**)&result_N_c_, info_.system.numberAtoms * sizeof(int));
     } catch (CudaException &e) {
       mprinterr("Error: Could not allocate memory on GPU!\n");
       freeGPUMemory();
@@ -344,15 +344,15 @@ void Action_GIGist::setAtomInformation(
   int nAtoms{ mol.NumAtoms() };
 
   for (int i = 0; i < nAtoms; ++i) {
-    addAtomType(setup.Top()[mol.BeginAtom() + i]);
+    addAtomType(setup.Top()[mol.MolUnit().Front() + i]);
     // Check if the molecule is a solvent, either by the topology parameters or because force was set.
     if ( (mol.IsSolvent() && info_.gist.solventStart == -1) 
             || (( info_.gist.solventStart > -1 ) 
                         && 
-                ( setup.Top()[mol.BeginAtom()].MolNum() >= info_.gist.solventStart ))
+                ( setup.Top()[mol.MolUnit().Front()].MolNum() >= info_.gist.solventStart ))
     ) {
 
-      std::string aName{ setup.Top()[mol.BeginAtom() + i].ElementName() };
+      std::string aName{ setup.Top()[mol.MolUnit().Front() + i].ElementName() };
       
       // Check if dictionary already holds an entry for the atoms name, if not add it to
       // the dictionary, if yes, add 1 to the correct solvent atom counter.
@@ -364,14 +364,14 @@ void Action_GIGist::setAtomInformation(
       }
       // Check for the centerSolventAtom (which in this easy approximation is either C or O)
       if ( weight(aName) < weight(info_.gist.centerAtom) ) {
-        info_.gist.centerAtom = setup.Top()[mol.BeginAtom() + i].ElementName();
+        info_.gist.centerAtom = setup.Top()[mol.MolUnit().Front() + i].ElementName();
         info_.gist.centerIdx = i; // Assumes the same order of atoms.
-        info_.gist.centerType = setup.Top()[mol.BeginAtom() + i].TypeIndex();
+        info_.gist.centerType = setup.Top()[mol.MolUnit().Front() + i].TypeIndex();
       }
       // Set solvent to true
-      solvent_[mol.BeginAtom() + i] = true;
+      solvent_[mol.MolUnit().Front() + i] = true;
     } else {
-      solvent_[mol.BeginAtom() + i] = false;
+      solvent_[mol.MolUnit().Front() + i] = false;
     }
   }
 }
@@ -398,7 +398,7 @@ void Action_GIGist::setMoleculeInformation(ActionSetup &setup)
           (
             ( info_.gist.solventStart > -1 ) 
             && 
-            ( setup.Top()[mol->BeginAtom()].MolNum() >= info_.gist.solventStart )
+            ( setup.Top()[mol->MolUnit().Front()].MolNum() >= info_.gist.solventStart )
           )
     ) {
       firstRound = false;
@@ -440,16 +440,16 @@ void Action_GIGist::prepDensityGrids()
 void Action_GIGist::prepQuaternion(ActionFrame &frame)
 {
   for (Topology::mol_iterator mol = top_->MolStart(); mol < top_->MolEnd(); ++mol) {
-      int moleculeLength = mol->EndAtom() - mol->BeginAtom() + 1;
+      int moleculeLength = mol->MolUnit().Back() - mol->MolUnit().Front() + 1;
       if (moleculeLength < 3)
          continue;
       if ((mol->IsSolvent() && info_.gist.solventStart == -1 ) || 
         (
           ( info_.gist.solventStart > -1 ) &&
-          ( top_->operator[](mol->BeginAtom()).MolNum() >= info_.gist.solventStart )
+          ( top_->operator[](mol->MolUnit().Front()).MolNum() >= info_.gist.solventStart )
           )
       ) {
-	      quat_indices_ = calcQuaternionIndices(mol->BeginAtom(), mol->EndAtom(), frame.Frm().XYZ(mol->BeginAtom()));
+	      quat_indices_ = calcQuaternionIndices(mol->MolUnit().Front(), mol->MolUnit().Back(), frame.Frm().XYZ(mol->MolUnit().Front()));
         break;
       }
     }
@@ -494,7 +494,7 @@ Action::RetType Action_GIGist::Init(ArgList &argList, ActionInit &actionInit, in
 Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
   solventAtomCounter_ = std::vector<int>();
   // Setup imaging and topology parsing.
-  image_.SetupImaging( setup.CoordInfo().TrajBox().Type() );
+  image_.SetupImaging( setup.CoordInfo().TrajBox().HasBox() );
 
   // Save topology and topology related values
   top_             = setup.TopAddress();
@@ -523,26 +523,26 @@ Action_GIGist::TestObj Action_GIGist::calcBoxParameters(const ActionFrame &frame
   std::unique_ptr<float[]> ucell;;
   int boxinfo{};
   // Check Boxinfo and write the necessary data into recip, ucell and boxinfo.
-  switch(image_.ImageType()) {
-    case NONORTHO:
-      recip = std::unique_ptr<float[]>(new float[9]);
-      ucell = std::unique_ptr<float[]>(new float[9]);
-      frame.Frm().BoxCrd().ToRecip(ucell_m, recip_m);
+  switch(image_.ImagingType()) {
+    case ImageOption::NONORTHO:
+      ucell_m = frame.Frm().BoxCrd().FracCell();
+      recip_m = frame.Frm().BoxCrd().UnitCell();
+      //frame.Frm().BoxCrd().ToRecip(ucell_m, recip_m);
       for (int i = 0; i < 9; ++i) {
         ucell[i] = static_cast<float>( ucell_m.Dptr()[i] );
         recip[i] = static_cast<float>( recip_m.Dptr()[i] );
       }
       boxinfo = 2;
       break;
-    case ORTHO:
+    case ImageOption::ORTHO:
       recip = std::unique_ptr<float[]>(new float[9]);
       for (int i = 0; i < 3; ++i) {
-        recip[i] = static_cast<float>( frame.Frm().BoxCrd()[i] );
+        recip[i] = static_cast<float>( frame.Frm().BoxCrd().XyzPtr()[i] );
       }
       ucell = nullptr;
       boxinfo = 1;
       break;
-    case NOIMAGE:
+    case ImageOption::NO_IMAGE:
       recip = nullptr;
       ucell = nullptr;
       boxinfo = 0;
@@ -595,8 +595,8 @@ void Action_GIGist::calcHVectors(
 }
 
 std::tuple<Vec3, int> Action_GIGist::prepCom(const Molecule& mol, const ActionFrame& frame) {
-  int mol_begin{ mol.BeginAtom() };
-  int mol_end{ mol.EndAtom() };
+  int mol_begin{ mol.MolUnit().Front() };
+  int mol_end{ mol.MolUnit().Back() };
   Vec3 com{ calcCenterOfMass(mol_begin, mol_end, frame.Frm().XYZ(mol_begin)) };
   return { com, bin(mol_begin, mol_end, com, frame) };
 }
@@ -623,7 +623,7 @@ std::tuple<std::vector<DOUBLE_O_FLOAT>,
     //			 be hidden quite nicely behind the interaction energy calculation.
     // Must create arrays from the vectors, does that by getting the address of the first element of the vector.
     auto e_result{ 
-      doActionCudaEnergy(
+      doActionCudaEnergy_GIGIST(
         frame.Frm().xAddress(),
         NBindex_c_,
         numberAtomTypes_,
@@ -718,7 +718,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
     if ((mol->IsSolvent() && info_.gist.solventStart == -1) || 
       (
         ( info_.gist.solventStart > -1 ) &&
-        ( top_->operator[](mol->BeginAtom()).MolNum() >= info_.gist.solventStart )
+        ( top_->operator[](mol->MolUnit().Front()).MolNum() >= info_.gist.solventStart )
       )
     ) {
       int headAtomIndex{ -1 };
@@ -740,7 +740,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
       #if !defined _OPENMP && !defined CUDA
       tHead_.Start();
       #endif
-      for (int atom1 = mol->BeginAtom(); atom1 < mol->EndAtom(); ++atom1) {
+      for (int atom1 = mol->MolUnit().Front(); atom1 < mol->MolUnit().Back(); ++atom1) {
         bool first{ true };
         if (solvent_[atom1]) { // Do we need that?
           // Save coords for later use.
@@ -752,9 +752,9 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
           if ( !info_.gist.useCOM && std::string((*top_)[atom1].ElementName()).compare(info_.gist.centerAtom) == 0 && first ) {
             // Try to bin atom1 onto the grid. If it is possible, get the index and keep working,
             // if not, calculate the energies between all atoms to this point.
-            voxel = bin(mol->BeginAtom(), mol->EndAtom(), vec, frame);
+            voxel = bin(mol->MolUnit().Front(), mol->MolUnit().Back(), vec, frame);
             coord = vec;
-            headAtomIndex = atom1 - mol->BeginAtom();
+            headAtomIndex = atom1 - mol->MolUnit().Front();
             first = false;
           } else {
             size_t bin_i{}, bin_j{}, bin_k{};
@@ -834,29 +834,31 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         */
         if (info_.gist.doorder) {
           double sum{ 0 };
-          Vec3 cent{ frame.Frm().xAddress() + (mol->BeginAtom() + headAtomIndex) * 3 };
+          Vec3 cent{ frame.Frm().xAddress() + (mol->MolUnit().Front() + headAtomIndex) * 3 };
           std::vector<Vec3> vectors{};
-          switch(image_.ImageType()) {
-            case NONORTHO:
-            case ORTHO:
+          switch(image_.ImagingType()) {
+            case ImageOption::NONORTHO:
+            case ImageOption::ORTHO:
               {
                 Matrix_3x3 ucell, recip;
-                frame.Frm().BoxCrd().ToRecip(ucell, recip);
-                Vec3 vec(frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(0) * 3));
+                ucell = frame.Frm().BoxCrd().UnitCell();
+                recip = frame.Frm().BoxCrd().FracCell();
+                //frame.Frm().BoxCrd().ToRecip(ucell, recip);
+                Vec3 vec(frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(0) * 3));
                 vectors.push_back( MinImagedVec(vec, cent, ucell, recip));
-                vec = Vec3(frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(1) * 3));
+                vec = Vec3(frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(1) * 3));
                 vectors.push_back( MinImagedVec(vec, cent, ucell, recip));
-                vec = Vec3(frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(2) * 3));
+                vec = Vec3(frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(2) * 3));
                 vectors.push_back( MinImagedVec(vec, cent, ucell, recip));
-                vec = Vec3(frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(3) * 3));
+                vec = Vec3(frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(3) * 3));
                 vectors.push_back( MinImagedVec(vec, cent, ucell, recip));
               }
               break;
             default:
-              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(0) * 3) ) - cent );
-              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(1) * 3) ) - cent );
-              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(2) * 3) ) - cent );
-              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->BeginAtom() + headAtomIndex).at(3) * 3) ) - cent );
+              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(0) * 3) ) - cent );
+              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(1) * 3) ) - cent );
+              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(2) * 3) ) - cent );
+              vectors.push_back( Vec3( frame.Frm().xAddress() + (order_indices.at(mol->MolUnit().Front() + headAtomIndex).at(3) * 3) ) - cent );
           }
           
           for (int i = 0; i < 3; ++i) {
@@ -878,7 +880,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         #pragma omp critical
         {
         #endif
-        result_.at(dict_.getIndex("neighbour"))->UpdateVoxel(voxel, std::get<3>(energyResults).at(mol->BeginAtom() + headAtomIndex));
+        result_.at(dict_.getIndex("neighbour"))->UpdateVoxel(voxel, std::get<3>(energyResults).at(mol->MolUnit().Front() + headAtomIndex));
         #ifdef _OPENMP
         }
         #endif
@@ -892,7 +894,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         {
         #endif
         // There is absolutely nothing to check here, as the solute can not be in place here.
-        for (int atom = mol->BeginAtom(); atom < mol->EndAtom(); ++atom) {
+        for (int atom = mol->MolUnit().Front(); atom < mol->MolUnit().Back(); ++atom) {
           // Just adds up all the interaction energies for this voxel.
           result_.at(dict_.getIndex("Eww"))->UpdateVoxel(voxel, static_cast<double>(eww_result.at(atom)));
           result_.at(dict_.getIndex("Esw"))->UpdateVoxel(voxel, static_cast<double>(esw_result.at(atom)));
@@ -913,7 +915,7 @@ Action::RetType Action_GIGist::DoAction(int frameNum, ActionFrame &frame) {
         // Use HUGE distances at the beginning. This is defined as 3.40282347e+38F.
         double distances[4]{HUGE, HUGE, HUGE, HUGE};
         // Needs to be fixed, one does not need to calculate all interactions each time.
-        for (int atom1 = mol->BeginAtom(); atom1 < mol->EndAtom(); ++atom1) {
+        for (int atom1 = mol->MolUnit().Front(); atom1 < mol->MolUnit().Back(); ++atom1) {
           double eww{ 0 };
           double esw{ 0 };
   // OPENMP only over the inner loop
@@ -1234,15 +1236,16 @@ double Action_GIGist::calcDistanceSqrd(const ActionFrame &frm, int a1, int a2) {
     double dist{ 0.0 };
     Vec3 vec1{frm.Frm().XYZ(a1)};
     Vec3 vec2{frm.Frm().XYZ(a2)};
-    switch( image_.ImageType() ) {
-        case NONORTHO:
-            frm.Frm().BoxCrd().ToRecip(ucell, recip);
+    switch( image_.ImagingType() ) {
+        case ImageOption::NONORTHO:
+            ucell = frm.Frm().BoxCrd().UnitCell();
+            recip = frm.Frm().BoxCrd().FracCell();
             dist = DIST2_ImageNonOrtho(vec1, vec2, ucell, recip);
             break;
-        case ORTHO:
+        case ImageOption::ORTHO:
             dist = DIST2_ImageOrtho(vec1, vec2, frm.Frm().BoxCrd());
             break;
-        case NOIMAGE:
+        case ImageOption::NO_IMAGE:
             dist = DIST2_NoImage(vec1, vec2);
             break;
         default:
@@ -1839,13 +1842,13 @@ bool Action_GIGist::almostEqual(double input, double control)
  * Frees all the Memory on the GPU.
  */
 void Action_GIGist::freeGPUMemory(void) {
-  freeCuda(NBindex_c_);
-  freeCuda(molecule_c_);
-  freeCuda(paramsLJ_c_);
-  freeCuda(result_w_c_);
-  freeCuda(result_s_c_);
-  freeCuda(result_O_c_);
-  freeCuda(result_N_c_);
+  freeCuda_GIGIST(NBindex_c_);
+  freeCuda_GIGIST(molecule_c_);
+  freeCuda_GIGIST(paramsLJ_c_);
+  freeCuda_GIGIST(result_w_c_);
+  freeCuda_GIGIST(result_s_c_);
+  freeCuda_GIGIST(result_O_c_);
+  freeCuda_GIGIST(result_N_c_);
   NBindex_c_   = nullptr;
   molecule_c_  = nullptr;
   paramsLJ_c_  = nullptr;
@@ -1861,8 +1864,8 @@ void Action_GIGist::freeGPUMemory(void) {
  */
 void Action_GIGist::copyToGPU(void) {
   try {
-    copyMemoryToDevice(&(NBIndex_[0]), NBindex_c_, NBIndex_.size() * sizeof(int));
-    copyMemoryToDeviceStruct(&(charges_[0]), &(atomTypes_[0]), solvent_.get(), &(molecule_[0]), info_.system.numberAtoms, &(molecule_c_),
+    copyMemoryToDevice_GIGIST(&(NBIndex_[0]), NBindex_c_, NBIndex_.size() * sizeof(int));
+    copyMemoryToDeviceStruct_GIGIST(&(charges_[0]), &(atomTypes_[0]), solvent_.get(), &(molecule_[0]), info_.system.numberAtoms, &(molecule_c_),
                               &(lJParamsA_[0]), &(lJParamsB_[0]), lJParamsA_.size(), &(paramsLJ_c_));
   } catch (CudaException &ce) {
     freeGPUMemory();
@@ -1984,7 +1987,7 @@ void Action_GIGist::writeOutSolute(ActionFrame& frame) {
   for (Topology::mol_iterator mol = top_->MolStart();
        mol < top_->MolEnd(); ++mol) {
     if (!mol->IsSolvent()) {
-      for (int atom = mol->BeginAtom(); atom < mol->EndAtom(); ++atom) {
+      for (int atom = mol->MolUnit().Front(); atom < mol->MolUnit().Back(); ++atom) {
         info_.system.numberSoluteAtoms++;
         const double *vec = frame.Frm().XYZ(atom);
         soluteCoords.push_back(Vec3(vec));

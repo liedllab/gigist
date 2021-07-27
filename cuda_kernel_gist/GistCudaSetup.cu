@@ -11,7 +11,7 @@
  * @throws: CudaException if a problem occurs.
  */
 __host__
-void allocateCuda(void **array, int size) {
+void allocateCuda_GIGIST(void **array, int size) {
   // Check if the array is actually free, if not, it will be freed 
   // (fun fact: checking is not necessary, one could also simply free the memory).
   if ((*array) != NULL) {
@@ -31,7 +31,7 @@ void allocateCuda(void **array, int size) {
  * @throws: CudaException if something goes wrong.
  */
 __host__
-void copyMemoryToDevice(void *array, void *array_c, int size) {
+void copyMemoryToDevice_GIGIST(void *array, void *array_c, int size) {
   // If something goes wrong, throw exception
   // In this case only copying can go wrong.
   if (cudaMemcpy(array_c, array, size, cudaMemcpyHostToDevice) != cudaSuccess) {
@@ -53,7 +53,7 @@ void copyMemoryToDevice(void *array, void *array_c, int size) {
  * @throws: CudaException if something bad happens.
  */
 __host__
-void copyMemoryToDeviceStruct(float *charge, int *atomtype, bool *solvent, int *molecule, int atomNumber, void **atomProps_c,
+void copyMemoryToDeviceStruct_GIGIST(float *charge, int *atomtype, bool *solvent, int *molecule, int atomNumber, void **atomProps_c,
                               float *ljA, float *ljB, int length, void **lJparams_c) {
   // Check if the two arrays are free. Again, this could be removed (but will stay!)
   if ((*atomProps_c) != NULL) {
@@ -101,7 +101,7 @@ void copyMemoryToDeviceStruct(float *charge, int *atomtype, bool *solvent, int *
  * @param array: The array you want to free.
  */
 __host__
-void freeCuda(void *array) {
+void freeCuda_GIGIST(void *array) {
   cudaFree(array);
 }
 
@@ -111,7 +111,7 @@ void freeCuda(void *array) {
  * This starts the cuda kernel, thus it is actually a quite long function.
  */
 __host__
-EnergyReturn doActionCudaEnergy(const double *coords, int *NBindex_c, int ntypes, void *parameter, void *molecule_c,
+EnergyReturn doActionCudaEnergy_GIGIST(const double *coords, int *NBindex_c, int ntypes, void *parameter, void *molecule_c,
                             int boxinfo, float *recip_o_box, float *ucell, int maxAtoms, int headAtomType, 
                             float neighbourCut2, int *result_o, int *result_n, float *result_w_c, float *result_s_c,
                             int *result_O_c, int *result_N_c, bool doorder) {
@@ -177,7 +177,7 @@ EnergyReturn doActionCudaEnergy(const double *coords, int *NBindex_c, int ntypes
   // If the doorder calculation is used, it needs to calculate everything differently, so the slow version is used
   // (this is about 10% slower).
   if (doorder) {
-    cudaCalcEnergySlow<<< (maxAtoms + SLOW_BLOCKSIZE) / SLOW_BLOCKSIZE, SLOW_BLOCKSIZE >>> (coords_c, NBindex_c, ntypes, lennardJonesParams, sender,
+    cudaCalcEnergySlow_GIGIST<<< (maxAtoms + SLOW_BLOCKSIZE) / SLOW_BLOCKSIZE, SLOW_BLOCKSIZE >>> (coords_c, NBindex_c, ntypes, lennardJonesParams, sender,
                                                                                             boxinf, ucellN, maxAtoms, result_w_c, result_s_c, nullptr, nullptr,
                                                                                             headAtomType, neighbourCut2, result_O_c, result_N_c);
   } else {
@@ -185,7 +185,7 @@ EnergyReturn doActionCudaEnergy(const double *coords, int *NBindex_c, int ntypes
     dim3 threadsPerBlock(BLOCKSIZE, BLOCKSIZE);
     dim3 numBlocks((maxAtoms + threadsPerBlock.x) / threadsPerBlock.x, (maxAtoms + threadsPerBlock.y) / threadsPerBlock.y);
     // The actual call of the device function
-    cudaCalcEnergy<<<numBlocks, threadsPerBlock>>> (coords_c, NBindex_c, ntypes, lennardJonesParams, sender,
+    cudaCalcEnergy_GIGIST<<<numBlocks, threadsPerBlock>>> (coords_c, NBindex_c, ntypes, lennardJonesParams, sender,
                                                                       boxinf, ucellN, maxAtoms, result_w_c, result_s_c, nullptr, nullptr,
                                                                       headAtomType, neighbourCut2, result_O_c, result_N_c);
     // Check if there was an error.
@@ -237,7 +237,7 @@ EnergyReturn doActionCudaEnergy(const double *coords, int *NBindex_c, int ntypes
 #ifdef DEBUG_GIST_CUDA
 // Not necessary
 __host__
-std::vector<Quaternion<float> > shoveQuaternionsTest(std::vector<Quaternion<float> > quats) {
+std::vector<Quaternion<float> > shoveQuaternionsTest_GIGIST(std::vector<Quaternion<float> > quats) {
   QuaternionG<float> *quats_c = NULL;
   float *ret_c = NULL;
   std::vector<Quaternion<float> > ret;
@@ -262,7 +262,7 @@ std::vector<Quaternion<float> > shoveQuaternionsTest(std::vector<Quaternion<floa
     throw CudaException();
   }
 
-  shoveQuaternions<<< (quats.size() + BLOCKSIZE) / BLOCKSIZE, BLOCKSIZE >>> (quats_c, quats.size(), ret_c);
+  shoveQuaternions_GIGIST<<< (quats.size() + BLOCKSIZE) / BLOCKSIZE, BLOCKSIZE >>> (quats_c, quats.size(), ret_c);
 
   if (cudaMemcpy(ret_f, ret_c, quats.size() * 4 * sizeof(float), cudaMemcpyDeviceToHost) != cudaSuccess) {
     cudaFree(quats_c); cudaFree(ret_c);
@@ -296,7 +296,7 @@ std::vector<Quaternion<float> > shoveQuaternionsTest(std::vector<Quaternion<floa
  * @return: A vector holding the values for dTStrans, dTSorient and dTSsix.
  * @throws: A CudaException on error.
  */
-std::vector<std::vector<float> > doActionCudaEntropy(std::vector<std::vector<Vec3> > coords, int x, int y, int z, std::vector<std::vector<Quaternion<float> > > quats, float temp, float rho0, int nFrames) {
+std::vector<std::vector<float> > doActionCudaEntropy_GIGIST(std::vector<std::vector<Vec3> > coords, int x, int y, int z, std::vector<std::vector<Quaternion<float> > > quats, float temp, float rho0, int nFrames) {
   
   // For the CPU
   // Input (from previous calculations)
@@ -376,7 +376,7 @@ std::vector<std::vector<float> > doActionCudaEntropy(std::vector<std::vector<Vec
   }
 
   EntropyCalculator entCalc = EntropyCalculator(quatsG, coordsG, dims, cumSumAtomsG, temp, rho0, nFrames);
-  calculateEntropy<<<(quats.size() + SLOW_BLOCKSIZE) / SLOW_BLOCKSIZE, SLOW_BLOCKSIZE>>>(entCalc, resultTStransG, resultTSorientG, resultTSsixG);
+  calculateEntropy_GIGIST<<<(quats.size() + SLOW_BLOCKSIZE) / SLOW_BLOCKSIZE, SLOW_BLOCKSIZE>>>(entCalc, resultTStransG, resultTSorientG, resultTSsixG);
   cudaError_t err7 = cudaGetLastError();
 
   // Error Check
