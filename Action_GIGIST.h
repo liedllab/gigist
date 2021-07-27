@@ -36,10 +36,11 @@
 
 #include "Action.h"
 #include "Vec3.h"
-#include "ImagedAction.h"
+#include "ImageOption.h"
 #include "CpptrajStdio.h"
 #include "Constants.h"
 #include "DataSet_3D.h"
+#include "DistRoutines.h"
 #include "ProgressBar.h"
 #include "DataSet_GridFlt.h"
 #include "DataFile.h"
@@ -470,7 +471,7 @@ private:
 
   // Topology Object
   Topology *top_;
-  ImagedAction image_;
+  ImageOption image_;
 
   // Defining the Grid
   

@@ -223,24 +223,24 @@ public:
 
 
 // Device functions
-__device__ float dist2_imageOrtho(float *, float *, const BoxInfo &);
-__device__ void scalarProd(float* , const BoxInfo & , float *);
-__device__ float dist2_imageNonOrtho(float *, float *, const BoxInfo &, const UnitCell &);
-__device__ float calcIfDistIsSmaller(float *, float *, int , int , int , const UnitCell &, float );
-__device__ float dist2_imageNonOrthoRecip(float * , float * , const UnitCell &);
-__device__ float dist2_imageNonOrthoRecipTest(float * , float * , const UnitCell );
-__device__ float dist2_noImage(float *, float *);
-__device__ float calcTotalEnergy(float , float , 
+__device__ float dist2_imageOrtho_GIGIST(float *, float *, const BoxInfo &);
+__device__ void scalarProd_GIGIST(float* , const BoxInfo & , float *);
+__device__ float dist2_imageNonOrtho_GIGIST(float *, float *, const BoxInfo &, const UnitCell &);
+__device__ float calcIfDistIsSmaller_GIGIST(float *, float *, int , int , int , const UnitCell &, float );
+__device__ float dist2_imageNonOrthoRecip_GIGIST(float * , float * , const UnitCell &);
+__device__ float dist2_imageNonOrthoRecipTest_GIGIST(float * , float * , const UnitCell );
+__device__ float dist2_noImage_GIGIST(float *, float *);
+__device__ float calcTotalEnergy_GIGIST(float , float , 
                             float , float , float);
-__device__ float calcVdWEnergy(float , float , float );
-__device__ float calcElectrostaticEnergy(float, float, float);
-__device__ int getLJIndex(int , int , int *, int );
-__device__ ParamsLJ getLJParam(int , int , int *, int , ParamsLJ *);
-__device__ bool isOnGrid(float *, float *, float *);
-__device__ float calcDist(float *, float *, const BoxInfo &, const UnitCell &);
+__device__ float calcVdWEnergy_GIGIST(float , float , float );
+__device__ float calcElectrostaticEnergy_GIGIST(float, float, float);
+__device__ int getLJIndex_GIGIST(int , int , int *, int );
+__device__ ParamsLJ getLJParam_GIGIST(int , int , int *, int , ParamsLJ *);
+__device__ bool isOnGrid_GIGIST(float *, float *, float *);
+__device__ float calcDist_GIGIST(float *, float *, const BoxInfo &, const UnitCell &);
 
 // Global functions
-__global__ void cudaCalcEnergy    (Coordinates_GPU *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *, float *, float *, int, float, int *, int *);
-__global__ void cudaCalcEnergySlow(Coordinates_GPU *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *,	float *, float *, int, float, int *, int *);
-__global__ void calculateEntropy(EntropyCalculator entCalc, float *, float *, float *);
+__global__ void cudaCalcEnergy_GIGIST    (Coordinates_GPU *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *, float *, float *, int, float, int *, int *);
+__global__ void cudaCalcEnergySlow_GIGIST(Coordinates_GPU *, int *, int, ParamsLJ *, AtomProperties *, BoxInfo, UnitCell, int, float *, float *,	float *, float *, int, float, int *, int *);
+__global__ void calculateEntropy_GIGIST(EntropyCalculator entCalc, float *, float *, float *);
 #endif

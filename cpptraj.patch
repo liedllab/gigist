@@ -4,7 +4,7 @@ diff -ur cpptraj_orig/configure cpptraj/configure
 @@ -2071,7 +2071,7 @@
  fi
  # CUDA
- if [ $USE_CUDA -eq 1 ] ; then
+ if [ $USE_CUDA -ne 0 -o $USE_HIP -ne 0 ] ; then
 -  CUDA_TARGET='cuda_kernels/libcpptraj_cuda.a'
 +  CUDA_TARGET='cuda_kernels/libcpptraj_cuda.a cuda_kernel_gist/lib_cuda_gist.a'
  fi
