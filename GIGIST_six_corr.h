@@ -4,7 +4,7 @@
 
 static const double SIX_CORR_SPACING = 0.01;
 // V(corr) = V(approx) / V(real)
-static const std::array<double, 1001> SIX_CORR = {
+static const std::array<double, 1001> SIX_CORR{
     1.0,
     1.000003125455630304e+00,
     1.000012500072675614e+00,
