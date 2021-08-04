@@ -12,8 +12,7 @@
 // Exception classes
 class CudaException : public std::exception {
 public:
-  CudaException() {
-  }
+  CudaException() = default;
 };
 
 struct EnergyReturn {
