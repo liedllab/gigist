@@ -518,6 +518,10 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
 
 Action_GIGist::TestObj Action_GIGist::calcBoxParameters(const ActionFrame &frame)
 {
+  
+  if (image_.ImagingEnabled()) {
+      image_.SetImageType( frame.Frm().BoxCrd().Is_X_Aligned_Ortho() );
+  }
   Matrix_3x3 ucell_m{}, recip_m{};
   std::unique_ptr<float[]> recip;
   std::unique_ptr<float[]> ucell;;
@@ -525,8 +529,10 @@ Action_GIGist::TestObj Action_GIGist::calcBoxParameters(const ActionFrame &frame
   // Check Boxinfo and write the necessary data into recip, ucell and boxinfo.
   switch(image_.ImagingType()) {
     case ImageOption::NONORTHO:
-      ucell_m = frame.Frm().BoxCrd().FracCell();
-      recip_m = frame.Frm().BoxCrd().UnitCell();
+      recip = std::unique_ptr<float[]>(new float[9]);
+      ucell = std::unique_ptr<float[]>(new float[9]);
+      ucell_m = frame.Frm().BoxCrd().UnitCell();
+      recip_m = frame.Frm().BoxCrd().FracCell();
       //frame.Frm().BoxCrd().ToRecip(ucell_m, recip_m);
       for (int i = 0; i < 9; ++i) {
         ucell[i] = static_cast<float>( ucell_m.Dptr()[i] );
