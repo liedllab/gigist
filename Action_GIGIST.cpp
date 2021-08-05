@@ -518,7 +518,7 @@ Action::RetType Action_GIGist::Setup(ActionSetup &setup) {
 
 Action_GIGist::TestObj Action_GIGist::calcBoxParameters(const ActionFrame &frame)
 {
-  
+  // Setting up Image type here, don't know why this is necessary at all...
   if (image_.ImagingEnabled()) {
       image_.SetImageType( frame.Frm().BoxCrd().Is_X_Aligned_Ortho() );
   }
