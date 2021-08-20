@@ -449,7 +449,7 @@ void Action_GIGist::prepQuaternion(ActionFrame &frame)
           ( top_->operator[](mol->MolUnit().Front()).MolNum() >= info_.gist.solventStart )
           )
       ) {
-	      quat_indices_ = calcQuaternionIndices(mol->MolUnit().Front(), mol->MolUnit().Back(), frame.Frm().XYZ(mol->MolUnit().Front()));
+        quat_indices_ = calcQuaternionIndices(mol->MolUnit().Front(), mol->MolUnit().Back(), frame.Frm().XYZ(mol->MolUnit().Front()));
         break;
       }
     }
@@ -626,7 +626,7 @@ std::tuple<std::vector<DOUBLE_O_FLOAT>,
     // std::vector<int> result_n{ std::vector<int>(info_.system.numberAtoms) };
     // TODO: Switch things around a bit and move the back copying to the end of the calculation.
     //       Then the time needed to go over all waters and the calculations that come with that can
-    //			 be hidden quite nicely behind the interaction energy calculation.
+    //       be hidden quite nicely behind the interaction energy calculation.
     // Must create arrays from the vectors, does that by getting the address of the first element of the vector.
     auto e_result{ 
       doActionCudaEnergy_GIGIST(
@@ -1331,7 +1331,7 @@ std::array<double, 2> Action_GIGist::calcOrientEntropy(int voxel) {
       dTSo_n += log((NNr - sin(NNr)) / Constants::PI);
     }
   }
-  dTSo_n += water_count * log(water_count);
+  dTSo_n += water_count * log(water_count - 1);  // Hack to test where the bulk bias comes from
   dTSo_n = Constants::GASK_KCAL * info_.system.temperature * (dTSo_n / water_count + Constants::EULER_MASC);
   ret.at(0) = dTSo_n;
   ret.at(1) = dTSo_n * water_count / (info_.system.nFrames * info_.grid.voxelVolume);
@@ -1364,10 +1364,10 @@ std::pair<std::array<double, 4>, int> Action_GIGist::calcTransEntropy(int voxel)
     double NNd = std::get<0>( distances );
     double NNs = std::get<1>( distances );
     if ( std::abs( std::get<2>( distances ) ) <= 3 ) {
-	    concerningNeighbors++;
+        concerningNeighbors++;
     }
     if ( std::abs( std::get<2>(distances) ) == 0 ) {
-	    mprintf("Something might be wrong!\n");
+        mprintf("Something might be wrong!\n");
     }
     NNd = sqrt(NNd);
     if (NNd <= 0) {
@@ -1483,17 +1483,21 @@ std::pair<int, int> Action_GIGist::calcTransEntropyDist(int voxel2, const VecAnd
     if (&quat == &quat2){
       continue;
     }
-    double dd{ (std::get<0>(quat) - std::get<0>(quat2)).Magnitude2() };
-    if (dd < NNd) {
-      NNd = dd;
-    }
+    /* double dd{ (std::get<0>(quat) - std::get<0>(quat2)).Magnitude2() }; */
+    /* if (dd < NNd) { */
+      /* NNd = dd; */
+    /* } */
     if (std::get<1>(quat).initialized() && std::get<1>(quat2).initialized())
     {
+      double dd{ (std::get<0>(quat) - std::get<0>(quat2)).Magnitude2() };
+      if (dd < NNd) {
+      NNd = dd;
+      }
       double rR{ std::get<1>( quat ).distance( std::get<1>(quat2) ) };
       double ds{ rR * rR + dd };
       if (ds < NNs) {
         NNs = ds;
-	frames.second = std::get<2>( quat2 );
+        frames.second = std::get<2>( quat2 );
       }
     }
   }
