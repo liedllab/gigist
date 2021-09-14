@@ -462,12 +462,9 @@ private:
   // values but a bit string with the boolean values encoded at each position.
   std::unique_ptr<bool []> solvent_;
   // FEBISS related variables
-<<<<<<< HEAD
   bool placeWaterMolecules_ = false;
   int nSoluteAtoms_ = 0;
   double idealWaterAngle_ = 104.57;
-=======
->>>>>>> Lots of refactoring
 
   std::vector<std::vector<Vec3> > waterCoordinates_;
   std::vector<std::vector<Vec3>> hVectors_;
