@@ -1331,7 +1331,7 @@ std::array<double, 2> Action_GIGist::calcOrientEntropy(int voxel) {
       dTSo_n += log((NNr - sin(NNr)) / Constants::PI);
     }
   }
-  dTSo_n += water_count * log(water_count - 1);  // Hack to test where the bulk bias comes from
+  dTSo_n += water_count * log(water_count);
   dTSo_n = Constants::GASK_KCAL * info_.system.temperature * (dTSo_n / water_count + Constants::EULER_MASC);
   ret.at(0) = dTSo_n;
   ret.at(1) = dTSo_n * water_count / (info_.system.nFrames * info_.grid.voxelVolume);
@@ -1366,9 +1366,9 @@ std::pair<std::array<double, 4>, int> Action_GIGist::calcTransEntropy(int voxel)
     if ( std::abs( std::get<2>( distances ) ) <= 3 ) {
         concerningNeighbors++;
     }
-    if ( std::abs( std::get<2>(distances) ) == 0 ) {
-        mprintf("Something might be wrong!\n");
-    }
+    /* if ( std::abs( std::get<2>(distances) ) == 0 ) { */
+    /*     mprintf("Something might be wrong!\n"); */
+    /* } */
     NNd = sqrt(NNd);
     if (NNd <= 0) {
         throw "Error: 2 molecules seem to be at the same place";
@@ -1427,7 +1427,9 @@ std::tuple<double, double, int> Action_GIGist::sixEntropyNearestNeighbor(
       }
     }
   }
-  if (std::get<1>(quat).initialized() && NNs > info_.grid.voxelSize * n_layers) {
+  double save_dist{ info_.grid.voxelSize * n_layers };
+  save_dist *= save_dist;
+  if (std::get<1>(quat).initialized() && NNs > save_dist) {
     return sixEntropyNearestNeighbor(quat, voxel, n_layers + 1, NNd, NNs);
   }
   int dist = std::abs(nnFrames.second - nnFrames.first);
@@ -1493,11 +1495,13 @@ std::pair<int, int> Action_GIGist::calcTransEntropyDist(int voxel2, const VecAnd
       if (dd < NNd) {
       NNd = dd;
       }
-      double rR{ std::get<1>( quat ).distance( std::get<1>(quat2) ) };
-      double ds{ rR * rR + dd };
-      if (ds < NNs) {
-        NNs = ds;
-        frames.second = std::get<2>( quat2 );
+      if (dd < NNs) {
+        double rR{ std::get<1>( quat ).distance( std::get<1>(quat2) ) };
+        double ds{ rR * rR + dd };
+        if (ds < NNs) {
+            NNs = ds;
+            frames.second = std::get<2>( quat2 );
+        }
       }
     }
   }
