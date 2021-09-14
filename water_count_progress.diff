@@ -1,0 +1,103 @@
+3a4
+> 
+46c47
+< /**Jonas K 
+---
+> /**
+414,415d414
+<         /* int natoms = mol->EndAtom() - mol->BeginAtom(); */
+<         /* if ((mol->IsSolvent() && this->forceStart_ == -1) || (( this->forceStart_ > -1 ) && ( this->top_->operator[](mol->BeginAtom()).MolNum() >= this->forceStart_ ) && (natoms > 2))) { */
+749,751c748
+<             std::vector<double> dTSorient = this->calcOrientEntropy(voxel);
+<             dTSorient_norm          = dTSorient.at(0); 
+<             dTSorient_dens          = dTSorient.at(1); 
+---
+>             dTSorient_norm          = this->calcOrientEntropy(voxel);
+754,760c751,755
+<             dTStrans_dens           = dTS.at(1);
+<             dTSsix_norm             = dTS.at(2);
+<             dTSsix_dens             = dTS.at(3);
+< #endif
+<             /* dTSorient_dens          = dTSorient_norm * pop / (this->nFrames_ * this->voxelVolume_); */
+<             /* dTStrans_dens           = dTStrans_norm  * pop / (this->nFrames_ * this->voxelVolume_); */
+<             /* dTSsix_dens             = dTSsix_norm    * pop / (this->nFrames_ * this->voxelVolume_); */
+---
+>             dTSsix_norm             = dTS.at(1);
+> #endif
+>             dTSorient_dens          = dTSorient_norm * pop / (this->nFrames_ * this->voxelVolume_);
+>             dTStrans_dens           = dTStrans_norm  * pop / (this->nFrames_ * this->voxelVolume_);
+>             dTSsix_dens             = dTSsix_norm    * pop / (this->nFrames_ * this->voxelVolume_);
+959c954
+< std::vector<double> Action_GIGist::calcOrientEntropy(int voxel) {
+---
+> double Action_GIGist::calcOrientEntropy(int voxel) {
+961,963d955
+<     std::vector<double> ret{};
+<     ret.push_back(0);
+<     ret.push_back(0);
+965c957
+<         return ret;
+---
+>         return 0;
+967,968c959
+<     double dTSo_n{ 0.0 };
+<     int water_count{ 0 };
+---
+>     double result{ 0.0 };
+986,988c977
+<             water_count++;
+<             /* dTSo_n += log(NNr * NNr * NNr * nwtotal / (3.0 * Constants::TWOPI)); */
+<             dTSo_n += log(NNr * NNr * NNr / (3.0 * Constants::TWOPI));
+---
+>             result += log(NNr * NNr * NNr * nwtotal / (3.0 * Constants::TWOPI));
+991,995c980
+<     dTSo_n += water_count * log(water_count);
+<     dTSo_n = Constants::GASK_KCAL * this-> temperature_ * (dTSo_n / water_count + Constants::EULER_MASC);
+<     ret.at(0) = dTSo_n;
+<     ret.at(1) = dTSo_n * water_count / (this->nFrames_ * this->voxelVolume_);
+<     return ret;
+---
+>     return Constants::GASK_KCAL * this->temperature_ * (result / nwtotal + Constants::EULER_MASC);
+1004a990
+>     // Will hold the two values dTStrans and dTSsix
+1006,1012c992,993
+<     ret.push_back(0); // dTSt_n
+<     ret.push_back(0); // dTSt_d
+<     ret.push_back(0); // dTSs_n
+<     ret.push_back(0); // dTSs_d
+<     // For the translational entropy, all solvents and ions are used.
+<     // Therefore, nwtotal can be used.
+<     // For dTSsix, ions are excluded, so the water number must be counted separately.
+---
+>     ret.push_back(0);
+>     ret.push_back(0);
+1014d994
+<     int water_count_s{ 0 };
+1018,1021d997
+<         if ( this->quaternions_.at(voxel).at(n0).initialized() ) {
+<             // The current molecule has rotational degrees of freedom, i.e., it is not an ion.
+<             water_count_s++;
+<         }
+1032c1008
+<             if (  this->quaternions_.at(voxel).at(n0).initialized()  &&
+---
+>             if ( this->quaternions_.at(voxel).at(n0).initialized() &&
+1070,1071d1045
+<             ret.at(2) = 0;
+<             ret.at(3) = 0;
+1080,1082c1054
+<             if ( this->quaternions_.at(voxel).at(n0).initialized() ) {
+<                 ret.at(2) += log(NNs * NNs * NNs * this->nFrames_ * Constants::PI * this->rho0_ / 48.0);
+<             }
+---
+>             ret.at(1) += log(NNs * NNs * NNs * this->nFrames_ * Constants::PI * this->rho0_ / 48.0);
+1086,1091c1058,1059
+<         double dTSt_n{ Constants::GASK_KCAL * this->temperature_ * (ret.at(0) / nwtotal + Constants::EULER_MASC) };
+<         ret.at(0) = dTSt_n;
+<         ret.at(1) = dTSt_n * nwtotal / (this->nFrames_ * this->voxelVolume_);
+<         double dTSs_n{ Constants::GASK_KCAL * this->temperature_ * (ret.at(2) / water_count_s + Constants::EULER_MASC) };
+<         ret.at(2) = dTSs_n;
+<         ret.at(3) = dTSs_n * water_count_s / (this->nFrames_ * this->voxelVolume_);
+---
+>         ret.at(0) = Constants::GASK_KCAL * this->temperature_ * (ret.at(0) / nwtotal + Constants::EULER_MASC);
+>         ret.at(1) = Constants::GASK_KCAL * this->temperature_ * (ret.at(1) / nwtotal + Constants::EULER_MASC);
