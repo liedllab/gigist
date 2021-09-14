@@ -2144,7 +2144,6 @@ std::tuple<int, int, int, int> Action_GIGist::findHMaximum(std::vector<std::vect
           if (std::fabs(newAngle - this->idealWaterAngle_)
               < std::fabs(angle - this->idealWaterAngle_))
             maximum = possibleMaximum;
-          }
         }
       }
     }
