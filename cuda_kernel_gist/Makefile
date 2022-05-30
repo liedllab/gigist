@@ -1,4 +1,4 @@
-include ../../external.config.h
+include ../../config.h
 
 DEL_FILE      = /bin/rm -f
 TARGET        = lib_cuda_gist.a
