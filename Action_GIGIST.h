@@ -457,6 +457,7 @@ private:
       bool doorder = true;
       bool useCOM = false;
       bool febiss = false;
+      double idealWaterAngle_ = 0.0;
     } gist;
     struct Grid {
       double voxelSize = 0.0;

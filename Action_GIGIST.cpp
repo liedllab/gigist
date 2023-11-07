@@ -119,6 +119,7 @@ void Action_GIGist::getGistSettings(ArgList &argList)
   info_.gist.doorder = argList.hasKey("doorder");
   info_.gist.useCOM = argList.hasKey("com");
   info_.gist.febiss = argList.hasKey("febiss");
+  info_.gist.idealWaterAngle_ = argList.getKeyDouble("febiss_angle", 104.57);
 }
 
 /*****
@@ -2128,8 +2129,8 @@ std::tuple<int, int, int, int> Action_GIGist::findHMaximum(std::vector<std::vect
           auto possibleMaximum = std::make_tuple(grid[i][j][k], i, j, k);
           if (considerOtherMaximum) {
             double angle = this->calcAngleBetweenHGridPos(possibleMaximum, firstMaximum);
-            if (this->idealWaterAngle_ - 5 < angle &&
-                angle < this->idealWaterAngle_ + 5) {
+            if (info_.gist.idealWaterAngle_ - 5 < angle &&
+                angle < info_.gist.idealWaterAngle_ + 5) {
               maximum = possibleMaximum;
             }
           } else {
@@ -2141,8 +2142,8 @@ std::tuple<int, int, int, int> Action_GIGist::findHMaximum(std::vector<std::vect
           double angle = calcAngleBetweenHGridPos(maximum, firstMaximum);
           auto possibleMaximum = std::make_tuple(grid[i][j][k], i, j, k);
           double newAngle = this->calcAngleBetweenHGridPos(possibleMaximum, firstMaximum);
-          if (std::fabs(newAngle - this->idealWaterAngle_)
-              < std::fabs(angle - this->idealWaterAngle_))
+          if (std::fabs(newAngle - info_.gist.idealWaterAngle_)
+              < std::fabs(angle - info_.gist.idealWaterAngle_))
             maximum = possibleMaximum;
         }
       }
