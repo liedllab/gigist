@@ -12,8 +12,8 @@ diff -ur cpptraj_orig/configure cpptraj/configure
  if [ "${LIB_STAT[$LREADLINE]}" = 'bundled' ] ; then
 Only in cpptraj: configure.orig
 diff -ur cpptraj_orig/src/CMakeLists.txt cpptraj/src/CMakeLists.txt
---- CMakeLists_og.txt   2023-11-07 17:47:49.265771619 +0100
-+++ CMakeLists.txt      2023-11-07 17:47:33.665776089 +0100
+--- cpptraj_orig/src/CMakeLists.txt   2023-11-07 17:47:49.265771619 +0100
++++ cpptraj/src/CMakeLists.txt      2023-11-07 17:47:33.665776089 +0100
 @@ -1,3 +1,4 @@
 +add_subdirectory(cuda_kernel_gist)
  add_subdirectory(xdrfile)
